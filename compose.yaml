@@ -47,11 +47,14 @@ services:
       traefik.http.services.cairn.loadbalancer.server.port: "8080"
 
     healthcheck:
-      test: ["/cairn", "healthcheck"]
+      test: ["CMD", "/cairn", "healthcheck"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
+
+    ports:
+      - "8080:8080"
 
 volumes:
   cairn_data:
@@ -60,3 +63,4 @@ volumes:
 networks:
   traefik_proxy:
     external: true
+    name: traefik_proxy
