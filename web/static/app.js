@@ -255,15 +255,44 @@ async function handleForgot(e) {
 
 function showForgotForm() {
   hide('login-form');
-  hide('forgot-link');
+  hide('register-form');
+  hide('login-links');
   show('forgot-form');
+}
+
+function showRegisterForm() {
+  hide('login-form');
+  hide('forgot-form');
+  hide('login-links');
+  setError('reg-error', '');
+  show('register-form');
+  $('reg-username').focus();
 }
 
 function showLoginForm() {
   hide('forgot-form');
-  show('forgot-link');
+  hide('register-form');
+  show('login-links');
   show('login-form');
   setError('forgot-msg', '');
+}
+
+async function handleRegister(e) {
+  e.preventDefault();
+  setError('reg-error', '');
+  const username    = $('reg-username').value.trim();
+  const email       = $('reg-email').value.trim();
+  const password    = $('reg-password').value;
+  const inviteToken = $('register-form').dataset.inviteToken || undefined;
+  try {
+    await POST('/auth/register', { username, email, password, invite_token: inviteToken });
+    await POST('/auth/login', { email, password });
+    delete $('register-form').dataset.inviteToken;
+    $('reg-email').readOnly = false;
+    await boot();
+  } catch (err) {
+    setError('reg-error', err.message);
+  }
 }
 
 /* ─── Logout ─────────────────────────────────────────────────────────────── */
@@ -931,9 +960,10 @@ function renderAdminTab(tabName) {
   body.innerHTML = '';
 
   switch (tabName) {
-    case 'stats': body.appendChild(buildAdminStats());   break;
-    case 'users': body.appendChild(buildAdminUsers());   break;
-    case 'audit': body.appendChild(buildAdminAudit());   break;
+    case 'stats':       body.appendChild(buildAdminStats());       break;
+    case 'users':       body.appendChild(buildAdminUsers());       break;
+    case 'invitations': body.appendChild(buildAdminInvitations()); break;
+    case 'audit':       body.appendChild(buildAdminAudit());       break;
   }
 }
 
@@ -1060,6 +1090,91 @@ function buildAdminAudit() {
   return frag;
 }
 
+function buildAdminInvitations() {
+  const frag = document.createDocumentFragment();
+
+  // Toggle open registration
+  const toggleWrap = el('div', 'setting-row mb-1');
+  const toggleLabel = el('label', 'setting-label', 'Inscription ouverte');
+  const toggleBtn = el('button', 'btn btn-small btn-secondary', '…');
+  toggleWrap.append(toggleLabel, toggleBtn);
+
+  GET('/admin/settings/registration').then(s => {
+    toggleBtn.textContent = s.open_registration ? 'Activée — désactiver' : 'Désactivée — activer';
+    toggleBtn.className = 'btn btn-small ' + (s.open_registration ? 'btn-danger' : 'btn-primary');
+  });
+  toggleBtn.onclick = async () => {
+    const s = await GET('/admin/settings/registration');
+    await PUT('/admin/settings/registration', { open_registration: !s.open_registration });
+    renderAdminTab('invitations');
+  };
+
+  // Invite form
+  const form = el('div', 'flex gap-1 mb-1');
+  const emailInput = el('input', 'form-input flex-1');
+  emailInput.type = 'email'; emailInput.placeholder = 'utilisateur@exemple.com';
+  const inviteBtn = el('button', 'btn btn-primary', 'Inviter');
+  const inviteErr = el('div', 'error-msg');
+  form.append(emailInput, inviteBtn);
+
+  inviteBtn.onclick = async () => {
+    inviteErr.textContent = '';
+    try {
+      await POST('/admin/invitations', { email: emailInput.value.trim() });
+      emailInput.value = '';
+      renderAdminTab('invitations');
+    } catch (e) { inviteErr.textContent = e.message; }
+  };
+
+  // Invitation list
+  const list = el('div');
+  list.textContent = 'Chargement…';
+
+  GET('/admin/invitations').then(invs => {
+    list.innerHTML = '';
+    if (!invs.length) { list.textContent = 'Aucune invitation.'; return; }
+    for (const inv of invs) {
+      const row = el('div', 'admin-user-row');
+
+      const info = el('div');
+      const email = el('span', 'user-name', inv.email);
+      let badge = '';
+      if (inv.used)    badge = '<span class="badge badge-inactive">utilisée</span>';
+      else if (inv.expired) badge = '<span class="badge badge-inactive">expirée</span>';
+      else             badge = '<span class="badge badge-admin">en attente</span>';
+      email.innerHTML += badge;
+
+      const exp = el('span', 'user-email',
+        ' · expire ' + new Date(inv.expires_at * 1000).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }));
+      info.append(email, exp);
+
+      const acts = el('div', 'flex gap-1');
+
+      if (inv.pending) {
+        const resendBtn = el('button', 'btn btn-small btn-secondary', 'Renvoyer');
+        resendBtn.onclick = async () => {
+          try { await POST(`/admin/invitations/${inv.id}/resend`); renderAdminTab('invitations'); }
+          catch (e) { alert(e.message); }
+        };
+        acts.appendChild(resendBtn);
+      }
+
+      const delBtn = el('button', 'btn btn-small btn-danger', 'Révoquer');
+      delBtn.onclick = async () => {
+        try { await DEL(`/admin/invitations/${inv.id}`); renderAdminTab('invitations'); }
+        catch (e) { alert(e.message); }
+      };
+      acts.appendChild(delBtn);
+
+      row.append(info, acts);
+      list.appendChild(row);
+    }
+  }).catch(e => { list.textContent = 'Erreur : ' + e.message; });
+
+  frag.append(toggleWrap, form, inviteErr, list);
+  return frag;
+}
+
 /* ─── New user (admin) ───────────────────────────────────────────────────── */
 async function createUser() {
   setError('nu-error', '');
@@ -1074,6 +1189,28 @@ async function createUser() {
   } catch (e) { setError('nu-error', e.message); }
 }
 
+/* ─── Invite token handling ──────────────────────────────────────────────── */
+async function checkInviteToken() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('invite');
+  if (!token) return;
+  try {
+    const inv = await GET(`/auth/invite/${token}`);
+    // Pre-fill register form and switch to it.
+    $('reg-email').value = inv.email;
+    $('reg-email').readOnly = true;
+    // Store token for submission.
+    $('register-form').dataset.inviteToken = token;
+    showRegisterForm();
+    // Clean URL without reload.
+    window.history.replaceState({}, '', '/');
+  } catch {
+    // Invalid/expired token — show error on login view.
+    show('view-login');
+    setError('login-error', 'Ce lien d\'invitation est invalide ou expiré.');
+  }
+}
+
 /* ─── Boot ───────────────────────────────────────────────────────────────── */
 async function boot() {
   try {
@@ -1081,6 +1218,8 @@ async function boot() {
   } catch {
     hide('view-home');
     show('view-login');
+    await checkInviteToken();
+    if (!document.getElementById('register-form').classList.contains('hidden')) return;
     $('login-email').focus();
     return;
   }
@@ -1111,8 +1250,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Login
   $('login-form').addEventListener('submit', handleLogin);
   $('forgot-form').addEventListener('submit', handleForgot);
+  $('register-form').addEventListener('submit', handleRegister);
   $('forgot-link').addEventListener('click', showForgotForm);
   $('forgot-back').addEventListener('click', showLoginForm);
+  $('register-link').addEventListener('click', showRegisterForm);
+  $('reg-back').addEventListener('click', showLoginForm);
 
   // Home nav
   $('search-form').addEventListener('submit', handleSearch);

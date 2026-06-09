@@ -28,6 +28,10 @@ type Config struct {
 	// TOTP
 	TOTPIssuer string
 
+	// Invitations
+	OpenRegistration bool
+	InviteLifetime   int // hours
+
 	// Proxy
 	TrustedProxy bool
 
@@ -52,6 +56,8 @@ func Load() (*Config, error) {
 		MaxUploadSize:            getEnvInt64("CAIRN_MAX_UPLOAD_SIZE", 52428800),
 		BookmarkletTokenLifetime: getEnvInt("CAIRN_BOOKMARKLET_TOKEN_LIFETIME", 90),
 		TOTPIssuer:               getEnv("CAIRN_TOTP_ISSUER", "Cairn"),
+		OpenRegistration:         getEnvBool("CAIRN_OPEN_REGISTRATION", true),
+		InviteLifetime:           getEnvInt("CAIRN_INVITE_LIFETIME", 72),
 		TrustedProxy:             getEnvBool("CAIRN_TRUSTED_PROXY", true),
 		SMTPHost:                 getEnv("CAIRN_SMTP_HOST", ""),
 		SMTPPort:                 getEnvInt("CAIRN_SMTP_PORT", 587),
