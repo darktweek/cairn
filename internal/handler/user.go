@@ -116,9 +116,13 @@ func (h *Handler) GetMyAuditLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	out := make([]map[string]any, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, auditJSON(e))
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"total":   total,
-		"entries": entries,
+		"entries": out,
 	})
 }
 

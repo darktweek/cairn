@@ -1241,13 +1241,6 @@ async function boot() {
 }
 
 /* ─── Event wiring ───────────────────────────────────────────────────────── */
-window.addEventListener('error', ev => {
-  const d = document.createElement('div');
-  d.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#f00;color:#fff;padding:8px;font:12px monospace;z-index:9999';
-  d.textContent = 'JS ERROR: ' + ev.message + ' (' + ev.filename + ':' + ev.lineno + ')';
-  document.body.appendChild(d);
-});
-
 document.addEventListener('DOMContentLoaded', () => {
   initRain();
 

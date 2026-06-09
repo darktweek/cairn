@@ -6,7 +6,7 @@ type User struct {
 	ID               string
 	Username         string
 	Email            string
-	Password         string // argon2id hash, never exposed in JSON
+	Password         string `json:"-"` // argon2id hash, never exposed in JSON
 	Role             string // "user" | "admin"
 	IsActive         bool
 	WallpaperLimit   *int    // nil = use global config default

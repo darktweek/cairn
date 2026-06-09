@@ -7,9 +7,46 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/darktweek/cairn/internal/middleware"
+	"github.com/darktweek/cairn/internal/model"
 	"github.com/darktweek/cairn/internal/repository"
 	"github.com/darktweek/cairn/internal/service"
 )
+
+// userJSON serializes a user for admin views. Never includes the password hash.
+func userJSON(u *model.User) map[string]any {
+	out := map[string]any{
+		"id":            u.ID,
+		"username":      u.Username,
+		"email":         u.Email,
+		"role":          u.Role,
+		"is_active":     u.IsActive,
+		"search_engine": u.SearchEngine,
+		"created_at":    u.CreatedAt.Unix(),
+		"updated_at":    u.UpdatedAt.Unix(),
+	}
+	if u.WallpaperLimit != nil {
+		out["wallpaper_limit"] = *u.WallpaperLimit
+	}
+	return out
+}
+
+// auditJSON serializes an audit entry with a unix timestamp.
+func auditJSON(e *model.AuditEntry) map[string]any {
+	out := map[string]any{
+		"id":         e.ID,
+		"action":     e.Action,
+		"ip":         e.IP,
+		"user_agent": e.UserAgent,
+		"created_at": e.CreatedAt.Unix(),
+	}
+	if e.UserID != nil {
+		out["user_id"] = *e.UserID
+	}
+	if e.Metadata != nil {
+		out["metadata"] = e.Metadata
+	}
+	return out
+}
 
 func (h *Handler) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 	offset, limit := pageParams(r)
@@ -18,9 +55,13 @@ func (h *Handler) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	out := make([]map[string]any, 0, len(users))
+	for _, u := range users {
+		out = append(out, userJSON(u))
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"total": total,
-		"users": users,
+		"users": out,
 	})
 }
 
@@ -31,7 +72,7 @@ func (h *Handler) AdminGetUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, user)
+	writeJSON(w, http.StatusOK, userJSON(user))
 }
 
 func (h *Handler) AdminSuspendUser(w http.ResponseWriter, r *http.Request) {
@@ -103,9 +144,13 @@ func (h *Handler) AdminGetAuditLog(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	out := make([]map[string]any, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, auditJSON(e))
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"total":   total,
-		"entries": entries,
+		"entries": out,
 	})
 }
 
@@ -115,5 +160,11 @@ func (h *Handler) AdminGetStats(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, stats)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"total_users":      stats.TotalUsers,
+		"active_users":     stats.ActiveUsers,
+		"total_bookmarks":  stats.TotalBookmarks,
+		"total_wallpapers": stats.TotalWallpapers,
+		"db_size_bytes":    stats.DBSizeBytes,
+	})
 }

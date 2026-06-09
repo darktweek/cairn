@@ -73,7 +73,21 @@ func (s *userService) Register(ctx context.Context, username, email, password, i
 	}
 
 	if err := s.repos.Users.Create(ctx, user); err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrConflict, err.Error())
+		// Anti-enumeration: never reveal which field collided. Log the real
+		// reason to the audit trail (visible to admins) but return a generic
+		// error to the client.
+		if existing, e := s.repos.Users.GetByEmail(ctx, user.Email); e == nil && existing != nil {
+			email := user.Email
+			_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+				ID:        ulid.Make().String(),
+				Action:    "register_blocked_duplicate_email",
+				IP:        ip,
+				UserAgent: userAgent,
+				Metadata:  map[string]any{"email": email},
+				CreatedAt: now,
+			})
+		}
+		return nil, fmt.Errorf("%w: impossible de créer le compte avec ces informations", ErrConflict)
 	}
 
 	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
