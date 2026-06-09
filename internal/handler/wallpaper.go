@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -102,13 +104,22 @@ func (h *Handler) ServeMedia(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "userID")
 	filename := chi.URLParam(r, "filename")
 
-	// Basic path traversal protection — chi ensures no slashes in params.
 	if userID == "" || filename == "" {
 		http.NotFound(w, r)
 		return
 	}
 
-	http.ServeFile(w, r, fmt.Sprintf("%s/%s/%s", mediaBasePath(r), userID, filename))
+	base := mediaBasePath(r)
+	// filepath.Clean eliminates any ".." sequences before they reach the filesystem.
+	target := filepath.Clean(filepath.Join(base, userID, filename))
+
+	// Verify the resolved path is still inside the media root.
+	if !strings.HasPrefix(target, filepath.Clean(base)+string(filepath.Separator)) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	http.ServeFile(w, r, target)
 }
 
 // mediaBasePath reads the media path from the request context (injected by main).

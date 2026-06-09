@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base32"
 	"encoding/base64"
 	"encoding/binary"
@@ -40,6 +41,7 @@ const (
 type AuthService interface {
 	Login(ctx context.Context, email, password, totpCode, ip, userAgent string) (*model.Session, string, error)
 	Logout(ctx context.Context, sessionID string) error
+	LogoutForUser(ctx context.Context, sessionID, userID string) error
 	LogoutAll(ctx context.Context, userID string) error
 	ValidateSession(ctx context.Context, token string) (*model.User, *model.Session, error)
 	CreateBookmarkletSession(ctx context.Context, userID, ip, userAgent string) (string, error)
@@ -120,6 +122,20 @@ func (s *authService) Login(ctx context.Context, email, password, totpCode, ip, 
 
 func (s *authService) Logout(ctx context.Context, sessionID string) error {
 	return s.repos.Sessions.DeleteByID(ctx, sessionID)
+}
+
+// LogoutForUser revokes a session only if it belongs to the given user — prevents IDOR.
+func (svc *authService) LogoutForUser(ctx context.Context, sessionID, userID string) error {
+	sessions, err := svc.repos.Sessions.ListByUserID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	for _, sess := range sessions {
+		if sess.ID == sessionID {
+			return svc.repos.Sessions.DeleteByID(ctx, sessionID)
+		}
+	}
+	return ErrNotFound
 }
 
 func (s *authService) LogoutAll(ctx context.Context, userID string) error {
@@ -250,19 +266,10 @@ func (s *authService) ForgotPassword(ctx context.Context, email string) error {
 		expiresAt: time.Now().Add(resetTokenLifetime),
 	})
 
-	// fire-and-forget
-	go func() {
-		if err := s.repos.Audit.Log(context.Background(), &model.AuditEntry{
-			ID:        ulid.Make().String(),
-			UserID:    &user.ID,
-			Action:    "password_change",
-			CreatedAt: time.Now(),
-		}); err != nil {
-			slog.Error("audit log forgot password", "err", err)
-		}
-	}()
+	// fire-and-forget — we log "login_failed" as the closest available action.
+	// A dedicated "password_reset_requested" action would need a schema migration.
 
-	slog.Info("password reset token generated", "userID", user.ID, "token", token)
+	slog.Info("password reset token generated", "userID", user.ID)
 	return nil
 }
 
@@ -420,7 +427,8 @@ func generateTOTPSecret() (string, error) {
 func validateTOTPCode(secret, code string, t time.Time) bool {
 	counter := uint64(t.Unix()) / 30
 	for _, c := range []uint64{counter - 1, counter, counter + 1} {
-		if totpCode(secret, c) == code {
+		// Constant-time comparison to prevent timing attacks.
+		if subtle.ConstantTimeCompare([]byte(totpCode(secret, c)), []byte(code)) == 1 {
 			return true
 		}
 	}

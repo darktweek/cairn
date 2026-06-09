@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -25,7 +26,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.User.Register(r.Context(), body.Username, body.Email, body.Password, r.RemoteAddr, r.UserAgent())
+	user, err := h.User.Register(r.Context(), body.Username, body.Email, body.Password, clientIP(r), r.UserAgent())
 	if err != nil {
 		writeError(w, err)
 		return
@@ -50,7 +51,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sess, token, err := h.Auth.Login(r.Context(), body.Email, body.Password, body.TOTPCode, r.RemoteAddr, r.UserAgent())
+	sess, token, err := h.Auth.Login(r.Context(), body.Email, body.Password, body.TOTPCode, clientIP(r), r.UserAgent())
 	if err != nil {
 		writeError(w, err)
 		return
@@ -71,6 +72,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	clearSessionCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
+
 
 func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -110,6 +112,14 @@ func setSessionCookie(w http.ResponseWriter, token string, maxAge int) {
 		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
 	})
+}
+
+// clientIP extracts the real IP from RemoteAddr (strips port).
+func clientIP(r *http.Request) string {
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+	return r.RemoteAddr
 }
 
 func clearSessionCookie(w http.ResponseWriter) {

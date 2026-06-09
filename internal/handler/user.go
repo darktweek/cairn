@@ -82,8 +82,9 @@ func (h *Handler) ListSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RevokeSession(w http.ResponseWriter, r *http.Request) {
+	user := middleware.UserFromCtx(r.Context())
 	sessionID := chi.URLParam(r, "id")
-	if err := h.Auth.Logout(r.Context(), sessionID); err != nil {
+	if err := h.Auth.LogoutForUser(r.Context(), sessionID, user.ID); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -169,7 +170,7 @@ func (h *Handler) DisableTOTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetBookmarklet(w http.ResponseWriter, r *http.Request) {
 	user := middleware.UserFromCtx(r.Context())
-	js, err := h.Bookmark.GenerateBookmarklet(r.Context(), user.ID, r.RemoteAddr, r.UserAgent())
+	js, err := h.Bookmark.GenerateBookmarklet(r.Context(), user.ID, clientIP(r), r.UserAgent())
 	if err != nil {
 		writeError(w, err)
 		return

@@ -3,7 +3,9 @@ package middleware
 import (
 	"crypto/sha256"
 	"fmt"
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -96,11 +98,17 @@ func (rl *rateLimiter) cleanup() {
 func clientIP(r *http.Request, trusted bool) string {
 	if trusted {
 		if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
-			return ip
+			return strings.TrimSpace(ip)
 		}
-		if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
-			return ip
+		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+			// X-Forwarded-For: client, proxy1, proxy2 — take leftmost (real client).
+			parts := strings.SplitN(forwarded, ",", 2)
+			return strings.TrimSpace(parts[0])
 		}
+	}
+	// r.RemoteAddr = "IP:port" — strip port.
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
 	}
 	return r.RemoteAddr
 }
