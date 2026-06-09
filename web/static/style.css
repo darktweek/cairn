@@ -303,6 +303,13 @@ html, body {
 }
 .forgot-link:hover { color: var(--text-dim); }
 
+#login-links {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
 /* ── Error / success messages ───────────────────────── */
 .error-msg {
   color: var(--danger);

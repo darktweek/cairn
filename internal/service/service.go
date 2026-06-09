@@ -6,22 +6,25 @@ import (
 )
 
 type Services struct {
-	Auth      AuthService
-	User      UserService
-	Bookmark  BookmarkService
-	Wallpaper WallpaperService
-	Admin     AdminService
-	Email     EmailService
+	Auth       AuthService
+	User       UserService
+	Bookmark   BookmarkService
+	Wallpaper  WallpaperService
+	Admin      AdminService
+	Email      EmailService
+	Invitation InvitationService
 }
 
 func New(repos *repository.Repositories, cfg *config.Config) *Services {
-	auth := newAuthService(repos, cfg)
+	auth  := newAuthService(repos, cfg)
+	email := newEmailService(cfg)
 	return &Services{
-		Auth:      auth,
-		User:      newUserService(repos, cfg),
-		Bookmark:  newBookmarkService(repos, cfg, auth),
-		Wallpaper: newWallpaperService(repos, cfg),
-		Admin:     newAdminService(repos, cfg),
-		Email:     newEmailService(cfg),
+		Auth:       auth,
+		User:       newUserService(repos, cfg),
+		Bookmark:   newBookmarkService(repos, cfg, auth),
+		Wallpaper:  newWallpaperService(repos, cfg),
+		Admin:      newAdminService(repos, cfg),
+		Email:      email,
+		Invitation: newInvitationService(repos, cfg, email),
 	}
 }
