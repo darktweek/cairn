@@ -21,15 +21,20 @@ var passwordResetTmpl string
 //go:embed templates/welcome.html
 var welcomeTmpl string
 
+//go:embed templates/invitation.html
+var invitationTmpl string
+
 type EmailService interface {
 	SendPasswordReset(ctx context.Context, email, token string) error
 	SendWelcome(ctx context.Context, email, username string) error
+	SendInvitation(ctx context.Context, email, inviteURL string, expiresAt time.Time) error
 }
 
 type emailService struct {
-	cfg            *config.Config
-	passwordReset  *template.Template
-	welcome        *template.Template
+	cfg           *config.Config
+	passwordReset *template.Template
+	welcome       *template.Template
+	invitation    *template.Template
 }
 
 func newEmailService(cfg *config.Config) EmailService {
@@ -37,6 +42,7 @@ func newEmailService(cfg *config.Config) EmailService {
 		cfg:           cfg,
 		passwordReset: template.Must(template.New("password_reset").Parse(passwordResetTmpl)),
 		welcome:       template.Must(template.New("welcome").Parse(welcomeTmpl)),
+		invitation:    template.Must(template.New("invitation").Parse(invitationTmpl)),
 	}
 }
 
@@ -80,6 +86,25 @@ func (s *emailService) SendWelcome(ctx context.Context, email, username string) 
 
 	if err := s.send(email, "Bienvenue sur Cairn", body); err != nil {
 		slog.Error("send welcome email", "err", err)
+	}
+	return nil
+}
+
+func (s *emailService) SendInvitation(ctx context.Context, email, inviteURL string, expiresAt time.Time) error {
+	data := struct {
+		InviteURL string
+		ExpiresAt string
+	}{
+		InviteURL: inviteURL,
+		ExpiresAt: expiresAt.Format("02/01/2006 à 15:04"),
+	}
+	body, err := renderTemplate(s.invitation, data)
+	if err != nil {
+		slog.Error("render invitation email", "err", err)
+		return nil
+	}
+	if err := s.send(email, "Invitation à rejoindre Cairn", body); err != nil {
+		slog.Error("send invitation email", "err", err)
 	}
 	return nil
 }
