@@ -1,11 +1,205 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cairn</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cairn</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garant:ital,wght@0,300;1,300&display=swap">
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-    <p>Cairn — à venir</p>
+
+  <!-- Background layers -->
+  <div id="bg-gradient" class="bg-layer"></div>
+  <img id="bg-image" class="bg-layer bg-hidden" alt="">
+  <video id="bg-video" class="bg-layer bg-hidden" autoplay muted loop playsinline></video>
+  <canvas id="rain-canvas"></canvas>
+
+  <!-- ── Login ── -->
+  <div id="view-login" class="view">
+    <div class="login-card">
+      <h1 class="login-title">Cairn</h1>
+
+      <form id="login-form" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="login-email">Email</label>
+          <input type="email" id="login-email" class="form-input" placeholder="vous@exemple.com"
+                 autocomplete="email" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="login-password">Mot de passe</label>
+          <input type="password" id="login-password" class="form-input" placeholder="••••••••••••"
+                 autocomplete="current-password" required>
+        </div>
+        <div id="totp-group" class="form-group hidden">
+          <label class="form-label" for="login-totp">Code TOTP</label>
+          <input type="text" id="login-totp" class="form-input" placeholder="123456"
+                 maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+        </div>
+        <div id="login-error" class="error-msg"></div>
+        <button type="submit" class="btn btn-primary btn-full">Se connecter</button>
+      </form>
+
+      <form id="forgot-form" class="hidden" novalidate>
+        <p class="text-sm text-dim text-center">
+          Entrez votre email, vous recevrez un lien de réinitialisation.
+        </p>
+        <div class="form-group">
+          <label class="form-label" for="forgot-email">Email</label>
+          <input type="email" id="forgot-email" class="form-input" placeholder="vous@exemple.com"
+                 autocomplete="email">
+        </div>
+        <div id="forgot-msg" class="error-msg"></div>
+        <div class="flex gap-1">
+          <button type="button" id="forgot-back" class="btn btn-secondary flex-1">Retour</button>
+          <button type="submit" class="btn btn-primary flex-1">Envoyer</button>
+        </div>
+      </form>
+
+      <button type="button" id="forgot-link" class="forgot-link">Mot de passe oublié ?</button>
+    </div>
+  </div>
+
+  <!-- ── Home ── -->
+  <div id="view-home" class="view hidden">
+    <nav class="home-nav">
+      <button class="nav-btn" id="btn-bookmarks">Marque-pages</button>
+      <button class="nav-btn" id="btn-settings">Compte</button>
+      <button class="nav-btn hidden" id="btn-admin">Admin</button>
+      <button class="nav-btn" id="btn-logout">Quitter</button>
+    </nav>
+
+    <div class="home-center">
+      <div id="clock" class="clock">00:00</div>
+      <div id="date-line" class="date-line"></div>
+      <div class="search-wrap">
+        <form class="search-form" id="search-form">
+          <input type="text" id="search-input" class="search-input"
+                 placeholder="Rechercher…  !bm pour les marque-pages"
+                 autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          <button type="submit" class="search-btn" aria-label="Rechercher">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Bookmark overlay ── -->
+  <div id="overlay-bookmarks" class="panel-overlay hidden">
+    <div class="panel panel-wide">
+      <div class="panel-header">
+        <span class="panel-title">Marque-pages</span>
+        <button class="btn btn-secondary" id="bm-add-btn">+ Ajouter</button>
+        <label class="btn btn-secondary bm-import-label" for="bm-import-file">Importer</label>
+        <input type="file" id="bm-import-file" accept=".html" class="sr-only">
+        <button class="btn btn-secondary" id="bm-export-btn">Exporter</button>
+        <button class="panel-close" id="bm-close">✕</button>
+      </div>
+      <div class="bm-filter-bar">
+        <input type="text" id="bm-search-input" class="form-input bm-search-input"
+               placeholder="Filtrer les marque-pages…">
+        <select id="bm-folder-filter" class="form-input bm-folder-select">
+          <option value="">Tous les dossiers</option>
+        </select>
+      </div>
+      <div class="panel-body" id="bm-list"></div>
+    </div>
+  </div>
+
+  <!-- ── Settings overlay ── -->
+  <div id="overlay-settings" class="panel-overlay hidden">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Mon compte</span>
+        <button class="panel-close" id="settings-close">✕</button>
+      </div>
+      <div class="tabs" id="settings-tabs">
+        <button class="tab active" data-tab="profile">Profil</button>
+        <button class="tab" data-tab="security">Sécurité</button>
+        <button class="tab" data-tab="engine">Recherche</button>
+        <button class="tab" data-tab="sessions">Sessions</button>
+        <button class="tab" data-tab="wallpapers">Fonds d'écran</button>
+        <button class="tab" data-tab="bookmarklet">Bookmarklet</button>
+      </div>
+      <div class="panel-body" id="settings-body"></div>
+    </div>
+  </div>
+
+  <!-- ── Admin overlay ── -->
+  <div id="overlay-admin" class="panel-overlay hidden">
+    <div class="panel panel-wide">
+      <div class="panel-header">
+        <span class="panel-title">Administration</span>
+        <button class="panel-close" id="admin-close">✕</button>
+      </div>
+      <div class="tabs" id="admin-tabs">
+        <button class="tab active" data-tab="stats">Statistiques</button>
+        <button class="tab" data-tab="users">Utilisateurs</button>
+        <button class="tab" data-tab="audit">Journal</button>
+      </div>
+      <div class="panel-body" id="admin-body"></div>
+    </div>
+  </div>
+
+  <!-- ── Bookmark add/edit modal ── -->
+  <div id="modal-bookmark" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-title" id="modal-bm-title">Ajouter un marque-page</div>
+      <div class="form-group">
+        <label class="form-label" for="modal-bm-url">URL</label>
+        <input type="url" id="modal-bm-url" class="form-input" placeholder="https://exemple.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="modal-bm-title-input">Titre</label>
+        <input type="text" id="modal-bm-title-input" class="form-input" placeholder="Titre du marque-page">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="modal-bm-folder">Dossier</label>
+        <input type="text" id="modal-bm-folder" class="form-input" placeholder="Dev/Go  (laisser vide pour aucun)">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="modal-bm-tags">Tags</label>
+        <input type="text" id="modal-bm-tags" class="form-input" placeholder="homelab, selfhosted  (séparés par des virgules)">
+      </div>
+      <div id="modal-bm-error" class="error-msg"></div>
+      <div class="modal-footer">
+        <button type="button" id="modal-bm-cancel" class="btn btn-secondary">Annuler</button>
+        <button type="button" id="modal-bm-save" class="btn btn-primary">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── New user modal (admin) ── -->
+  <div id="modal-new-user" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-title">Créer un utilisateur</div>
+      <div class="form-group">
+        <label class="form-label" for="nu-username">Nom d'utilisateur</label>
+        <input type="text" id="nu-username" class="form-input" placeholder="alice">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="nu-email">Email</label>
+        <input type="email" id="nu-email" class="form-input" placeholder="alice@exemple.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="nu-password">Mot de passe temporaire</label>
+        <input type="password" id="nu-password" class="form-input" placeholder="min. 12 caractères">
+      </div>
+      <div id="nu-error" class="error-msg"></div>
+      <div class="modal-footer">
+        <button type="button" id="nu-cancel" class="btn btn-secondary">Annuler</button>
+        <button type="button" id="nu-save" class="btn btn-primary">Créer</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js" defer></script>
 </body>
 </html>
