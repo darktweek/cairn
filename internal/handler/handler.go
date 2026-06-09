@@ -10,24 +10,26 @@ import (
 
 // Handler holds all services and is the base for all HTTP handlers.
 type Handler struct {
-	Auth       service.AuthService
-	User       service.UserService
-	Bookmark   service.BookmarkService
-	Wallpaper  service.WallpaperService
-	Admin      service.AdminService
-	Email      service.EmailService
-	Invitation service.InvitationService
+	Auth         service.AuthService
+	User         service.UserService
+	Bookmark     service.BookmarkService
+	Wallpaper    service.WallpaperService
+	Admin        service.AdminService
+	Email        service.EmailService
+	Invitation   service.InvitationService
+	secureCookie bool
 }
 
-func New(svcs *service.Services) *Handler {
+func New(svcs *service.Services, production bool) *Handler {
 	return &Handler{
-		Auth:       svcs.Auth,
-		User:       svcs.User,
-		Bookmark:   svcs.Bookmark,
-		Wallpaper:  svcs.Wallpaper,
-		Admin:      svcs.Admin,
-		Email:      svcs.Email,
-		Invitation: svcs.Invitation,
+		Auth:         svcs.Auth,
+		User:         svcs.User,
+		Bookmark:     svcs.Bookmark,
+		Wallpaper:    svcs.Wallpaper,
+		Admin:        svcs.Admin,
+		Email:        svcs.Email,
+		Invitation:   svcs.Invitation,
+		secureCookie: production,
 	}
 }
 
