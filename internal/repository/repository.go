@@ -1,0 +1,25 @@
+package repository
+
+import "database/sql"
+
+type Repositories struct {
+	Users      UserRepository
+	Sessions   SessionRepository
+	Bookmarks  BookmarkRepository
+	Tags       TagRepository
+	Wallpapers WallpaperRepository
+	TOTP       TOTPRepository
+	Audit      AuditRepository
+}
+
+func New(db *sql.DB) *Repositories {
+	return &Repositories{
+		Users:      newSQLiteUserRepo(db),
+		Sessions:   newSQLiteSessionRepo(db),
+		Bookmarks:  newSQLiteBookmarkRepo(db),
+		Tags:       newSQLiteTagRepo(db),
+		Wallpapers: newSQLiteWallpaperRepo(db),
+		TOTP:       newSQLiteTOTPRepo(db),
+		Audit:      newSQLiteAuditRepo(db),
+	}
+}

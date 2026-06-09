@@ -1,0 +1,62 @@
+name: cairn
+
+services:
+  cairn:
+    image: cairn:latest
+    container_name: cairn
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+
+    volumes:
+      - cairn_data:/data
+
+    environment:
+      CAIRN_ADDR:                       ":8080"
+      CAIRN_ENV:                        "production"
+      CAIRN_BASE_URL:                   "https://go.dotnot.be"
+      CAIRN_DB_PATH:                    "/data/db.sqlite"
+      CAIRN_MEDIA_PATH:                 "/data/media"
+      CAIRN_DEFAULT_WALLPAPER_LIMIT:    "10"
+      CAIRN_MAX_UPLOAD_SIZE:            "52428800"
+      CAIRN_TOTP_ISSUER:                "Cairn"
+      CAIRN_BOOKMARKLET_TOKEN_LIFETIME: "90"
+      CAIRN_TRUSTED_PROXY:              "true"
+      CAIRN_SMTP_HOST:                  "smtp.example.com"
+      CAIRN_SMTP_PORT:                  "587"
+      CAIRN_SMTP_FROM:                  "cairn@example.com"
+      CAIRN_SMTP_TLS:                   "true"
+
+    env_file:
+      - .env  # CAIRN_SESSION_SECRET, CAIRN_SMTP_USER, CAIRN_SMTP_PASS
+
+    networks:
+      - traefik_proxy
+
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.cairn.rule: "Host(`go.dotnot.be`)"
+      traefik.http.routers.cairn.entrypoints: "websecure"
+      traefik.http.routers.cairn.tls.certresolver: "cloudflare"
+      traefik.http.services.cairn.loadbalancer.server.port: "8080"
+
+    healthcheck:
+      test: ["/cairn", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  cairn_data:
+    driver: local
+
+networks:
+  traefik_proxy:
+    external: true
