@@ -57,7 +57,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setSessionCookie(w, token, sessionMaxAge)
+	h.setSessionCookie(w, token, sessionMaxAge)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"session_id": sess.ID,
 		"expires_at": sess.ExpiresAt.Unix(),
@@ -69,7 +69,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	if sess != nil {
 		_ = h.Auth.Logout(r.Context(), sess.ID)
 	}
-	clearSessionCookie(w)
+	h.clearSessionCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -102,14 +102,14 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func setSessionCookie(w http.ResponseWriter, token string, maxAge int) {
+func (h *Handler) setSessionCookie(w http.ResponseWriter, token string, maxAge int) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    token,
 		Path:     "/",
 		MaxAge:   maxAge,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   h.secureCookie,
 		SameSite: http.SameSiteStrictMode,
 	})
 }
@@ -122,7 +122,7 @@ func clientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
-func clearSessionCookie(w http.ResponseWriter) {
+func (h *Handler) clearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    "",
@@ -130,7 +130,7 @@ func clearSessionCookie(w http.ResponseWriter) {
 		Expires:  time.Unix(0, 0),
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   h.secureCookie,
 		SameSite: http.SameSiteStrictMode,
 	})
 }
