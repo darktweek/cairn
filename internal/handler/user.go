@@ -63,22 +63,27 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	user := middleware.UserFromCtx(r.Context())
-	sess := middleware.SessionFromCtx(r.Context())
+	curr := middleware.SessionFromCtx(r.Context())
 
-	// Delegate to auth — no ListSessions on auth service, so we'd need to add it.
-	// For now, return current session only.
-	writeJSON(w, http.StatusOK, []map[string]any{
-		{
-			"id":             sess.ID,
-			"user_agent":     sess.UserAgent,
-			"ip":             sess.IP,
-			"expires_at":     sess.ExpiresAt.Unix(),
-			"created_at":     sess.CreatedAt.Unix(),
-			"is_bookmarklet": sess.IsBookmarklet,
-			"current":        true,
-		},
-	})
-	_ = user
+	sessions, err := h.Auth.ListSessions(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	out := make([]map[string]any, 0, len(sessions))
+	for _, s := range sessions {
+		out = append(out, map[string]any{
+			"id":             s.ID,
+			"user_agent":     s.UserAgent,
+			"ip":             s.IP,
+			"expires_at":     s.ExpiresAt.Unix(),
+			"created_at":     s.CreatedAt.Unix(),
+			"is_bookmarklet": s.IsBookmarklet,
+			"current":        s.ID == curr.ID,
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (h *Handler) RevokeSession(w http.ResponseWriter, r *http.Request) {
