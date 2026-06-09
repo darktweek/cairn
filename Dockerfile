@@ -20,7 +20,6 @@ FROM scratch
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /build/cairn /cairn
-COPY --from=builder /build/web /web
 
 VOLUME ["/data"]
 EXPOSE 8080
