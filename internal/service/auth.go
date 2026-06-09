@@ -43,6 +43,7 @@ type AuthService interface {
 	Logout(ctx context.Context, sessionID string) error
 	LogoutForUser(ctx context.Context, sessionID, userID string) error
 	LogoutAll(ctx context.Context, userID string) error
+	ListSessions(ctx context.Context, userID string) ([]*model.Session, error)
 	ValidateSession(ctx context.Context, token string) (*model.User, *model.Session, error)
 	CreateBookmarkletSession(ctx context.Context, userID, ip, userAgent string) (string, error)
 	BeginTOTP(ctx context.Context, userID string) (secret, qrCodeURL string, err error)
@@ -140,6 +141,10 @@ func (svc *authService) LogoutForUser(ctx context.Context, sessionID, userID str
 
 func (s *authService) LogoutAll(ctx context.Context, userID string) error {
 	return s.repos.Sessions.DeleteByUserID(ctx, userID)
+}
+
+func (s *authService) ListSessions(ctx context.Context, userID string) ([]*model.Session, error) {
+	return s.repos.Sessions.ListByUserID(ctx, userID)
 }
 
 func (s *authService) ValidateSession(ctx context.Context, token string) (*model.User, *model.Session, error) {
