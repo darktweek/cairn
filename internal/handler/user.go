@@ -102,7 +102,7 @@ func (h *Handler) RevokeAllSessions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	clearSessionCookie(w)
+	h.clearSessionCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 

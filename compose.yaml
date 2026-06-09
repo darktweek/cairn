@@ -20,7 +20,7 @@ services:
     environment:
       CAIRN_ADDR:                       ":8080"
       CAIRN_ENV:                        "production"
-      CAIRN_BASE_URL:                   "https://go.dotnot.be"
+      CAIRN_BASE_URL:                   "http://localhost:8080"  # changer en https://... pour la prod
       CAIRN_DB_PATH:                    "/data/db.sqlite"
       CAIRN_MEDIA_PATH:                 "/data/media"
       CAIRN_DEFAULT_WALLPAPER_LIMIT:    "10"
