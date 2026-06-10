@@ -144,9 +144,24 @@ func (h *Handler) AdminGetAuditLog(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+
+	// Resolve actor usernames so the journal shows names, not raw IDs.
+	names := map[string]string{}
+	if users, _, e := h.Admin.ListUsers(r.Context(), 0, 1000); e == nil {
+		for _, u := range users {
+			names[u.ID] = u.Username
+		}
+	}
+
 	out := make([]map[string]any, 0, len(entries))
 	for _, e := range entries {
-		out = append(out, auditJSON(e))
+		j := auditJSON(e)
+		if e.UserID != nil {
+			if name, ok := names[*e.UserID]; ok {
+				j["username"] = name
+			}
+		}
+		out = append(out, j)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"total":   total,
