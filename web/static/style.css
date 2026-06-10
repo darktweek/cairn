@@ -570,6 +570,10 @@ body.searching #date-line {
   text-align: center;
   min-height: 1.1em;
 }
+.reg-success-text {
+  color: var(--success);
+  font-size: 0.9rem;
+}
 
 .success-msg {
   color: var(--success);
