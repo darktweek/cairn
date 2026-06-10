@@ -986,7 +986,7 @@ function showRegisterForm() {
   hide('login-links');
   setError('reg-error', '');
   hide('reg-success');
-  show('reg-fields-footer');
+  show('reg-inputs');
   show('register-form');
   $('reg-username').focus();
 }
@@ -1012,7 +1012,7 @@ async function handleRegister(e) {
     $('reg-username').value = '';
     $('reg-email').value    = '';
     $('reg-success-msg').textContent = t('register.sent');
-    hide('reg-fields-footer');
+    hide('reg-inputs');
     show('reg-success');
   } catch (err) {
     setError('reg-error', err.message);
@@ -1943,6 +1943,54 @@ function buildAdminUsers() {
 
       const acts = el('div', 'flex gap-1 flex-wrap');
 
+      // Inline upload size limit (single file, MB)
+      const limitWrap = el('div', 'flex gap-1 items-center');
+      const limitInput = el('input', 'form-input form-input-sm');
+      limitInput.type = 'number'; limitInput.min = '1'; limitInput.style.width = '5.5rem';
+      limitInput.placeholder = t('admin.upload.global');
+      limitInput.title = t('admin.upload.limit') + ' (MB)';
+      if (u.upload_size_limit != null) limitInput.value = Math.round(u.upload_size_limit / (1024 * 1024));
+      const limitSaveBtn = el('button', 'btn btn-small btn-secondary', '💾');
+      limitSaveBtn.title = t('admin.upload.limit.save');
+      const limitResetBtn = el('button', 'btn btn-small btn-secondary', '↺');
+      limitResetBtn.title = t('admin.upload.limit.reset');
+      limitSaveBtn.onclick = async () => {
+        const mb = limitInput.value.trim();
+        if (!mb || isNaN(parseInt(mb, 10)) || parseInt(mb, 10) <= 0) return;
+        const limit = parseInt(mb, 10) * 1024 * 1024;
+        try { await PUT(`/admin/users/${u.id}/upload-size-limit`, { limit }); renderAdminTab('users'); }
+        catch (e) { alert(e.message); }
+      };
+      limitResetBtn.onclick = async () => {
+        try { await PUT(`/admin/users/${u.id}/upload-size-limit`, { limit: null }); renderAdminTab('users'); }
+        catch (e) { alert(e.message); }
+      };
+      limitWrap.append(limitInput, limitSaveBtn, limitResetBtn);
+
+      // Inline storage quota (total, MB)
+      const quotaWrap = el('div', 'flex gap-1 items-center');
+      const quotaInput = el('input', 'form-input form-input-sm');
+      quotaInput.type = 'number'; quotaInput.min = '1'; quotaInput.style.width = '5.5rem';
+      quotaInput.placeholder = t('admin.upload.global');
+      quotaInput.title = t('admin.quota') + ' (MB)';
+      if (u.storage_quota != null) quotaInput.value = Math.round(u.storage_quota / (1024 * 1024));
+      const quotaSaveBtn = el('button', 'btn btn-small btn-secondary', '💾');
+      quotaSaveBtn.title = t('admin.quota.save');
+      const quotaResetBtn = el('button', 'btn btn-small btn-secondary', '↺');
+      quotaResetBtn.title = t('admin.quota.reset');
+      quotaSaveBtn.onclick = async () => {
+        const mb = quotaInput.value.trim();
+        if (!mb || isNaN(parseInt(mb, 10)) || parseInt(mb, 10) <= 0) return;
+        const quota = parseInt(mb, 10) * 1024 * 1024;
+        try { await PUT(`/admin/users/${u.id}/storage-quota`, { quota }); renderAdminTab('users'); }
+        catch (e) { alert(e.message); }
+      };
+      quotaResetBtn.onclick = async () => {
+        try { await PUT(`/admin/users/${u.id}/storage-quota`, { quota: null }); renderAdminTab('users'); }
+        catch (e) { alert(e.message); }
+      };
+      quotaWrap.append(quotaInput, quotaSaveBtn, quotaResetBtn);
+
       if (u.id !== S.user.id) {
         const suspBtn = el('button', 'btn btn-small btn-secondary',
           u.is_active ? t('admin.user.suspend') : t('admin.user.activate'));
@@ -1964,58 +2012,12 @@ function buildAdminUsers() {
           } catch (e) { alert(e.message); }
         };
 
-        // Inline upload size limit (single file, MB)
-        const limitWrap = el('div', 'flex gap-1 items-center');
-        const limitInput = el('input', 'form-input form-input-sm');
-        limitInput.type = 'number'; limitInput.min = '1'; limitInput.style.width = '5.5rem';
-        limitInput.placeholder = t('admin.upload.global');
-        limitInput.title = t('admin.upload.limit') + ' (MB)';
-        if (u.upload_size_limit != null) limitInput.value = Math.round(u.upload_size_limit / (1024 * 1024));
-        const limitSaveBtn = el('button', 'btn btn-small btn-secondary', '💾');
-        limitSaveBtn.title = t('admin.upload.limit.save');
-        const limitResetBtn = el('button', 'btn btn-small btn-secondary', '↺');
-        limitResetBtn.title = t('admin.upload.limit.reset');
-        limitSaveBtn.onclick = async () => {
-          const mb = limitInput.value.trim();
-          if (!mb || isNaN(parseInt(mb, 10)) || parseInt(mb, 10) <= 0) return;
-          const limit = parseInt(mb, 10) * 1024 * 1024;
-          try { await PUT(`/admin/users/${u.id}/upload-size-limit`, { limit }); renderAdminTab('users'); }
-          catch (e) { alert(e.message); }
-        };
-        limitResetBtn.onclick = async () => {
-          try { await PUT(`/admin/users/${u.id}/upload-size-limit`, { limit: null }); renderAdminTab('users'); }
-          catch (e) { alert(e.message); }
-        };
-        limitWrap.append(limitInput, limitSaveBtn, limitResetBtn);
-
-        // Inline storage quota (total, MB)
-        const quotaWrap = el('div', 'flex gap-1 items-center');
-        const quotaInput = el('input', 'form-input form-input-sm');
-        quotaInput.type = 'number'; quotaInput.min = '1'; quotaInput.style.width = '5.5rem';
-        quotaInput.placeholder = t('admin.upload.global');
-        quotaInput.title = t('admin.quota') + ' (MB)';
-        if (u.storage_quota != null) quotaInput.value = Math.round(u.storage_quota / (1024 * 1024));
-        const quotaSaveBtn = el('button', 'btn btn-small btn-secondary', '💾');
-        quotaSaveBtn.title = t('admin.quota.save');
-        const quotaResetBtn = el('button', 'btn btn-small btn-secondary', '↺');
-        quotaResetBtn.title = t('admin.quota.reset');
-        quotaSaveBtn.onclick = async () => {
-          const mb = quotaInput.value.trim();
-          if (!mb || isNaN(parseInt(mb, 10)) || parseInt(mb, 10) <= 0) return;
-          const quota = parseInt(mb, 10) * 1024 * 1024;
-          try { await PUT(`/admin/users/${u.id}/storage-quota`, { quota }); renderAdminTab('users'); }
-          catch (e) { alert(e.message); }
-        };
-        quotaResetBtn.onclick = async () => {
-          try { await PUT(`/admin/users/${u.id}/storage-quota`, { quota: null }); renderAdminTab('users'); }
-          catch (e) { alert(e.message); }
-        };
-        quotaWrap.append(quotaInput, quotaSaveBtn, quotaResetBtn);
-
-        acts.append(suspBtn, limitWrap, quotaWrap, delBtn);
+        acts.append(suspBtn, delBtn);
       } else {
         acts.appendChild(el('span', 'text-sm text-dimmer', t('admin.user.you')));
       }
+
+      acts.append(limitWrap, quotaWrap);
 
       row.append(nameEl, acts);
       list.appendChild(row);
@@ -2365,7 +2367,7 @@ function buildAdminInvitations() {
 
   GET('/admin/invitations').then(invs => {
     list.innerHTML = '';
-    if (!invs.length) { list.textContent = t('admin.inv.none'); return; }
+    if (!invs.length) { list.appendChild(el('p', 'text-sm text-dimmer', t('admin.inv.none'))); return; }
     for (const inv of invs) {
       const row = el('div', 'admin-user-row');
 
