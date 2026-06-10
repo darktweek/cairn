@@ -35,6 +35,14 @@ type Config struct {
 	// Menu — bang that opens the full-page hub. Empty = admin-editable (default !menu).
 	MenuBang string
 
+	// OIDC / SSO — when issuer+client are set here, they are locked (env-managed).
+	// Otherwise an admin may configure them from the panel.
+	OIDCIssuer       string
+	OIDCClientID     string
+	OIDCClientSecret string
+	OIDCProviderName string
+	OIDCScopes       string
+
 	// Proxy
 	TrustedProxy bool
 
@@ -62,6 +70,11 @@ func Load() (*Config, error) {
 		OpenRegistration:         getEnvBool("CAIRN_OPEN_REGISTRATION", true),
 		InviteLifetime:           getEnvInt("CAIRN_INVITE_LIFETIME", 72),
 		MenuBang:                 getEnv("CAIRN_MENU_BANG", ""),
+		OIDCIssuer:               getEnv("CAIRN_OIDC_ISSUER", ""),
+		OIDCClientID:             getEnv("CAIRN_OIDC_CLIENT_ID", ""),
+		OIDCClientSecret:         getEnv("CAIRN_OIDC_CLIENT_SECRET", ""),
+		OIDCProviderName:         getEnv("CAIRN_OIDC_PROVIDER_NAME", ""),
+		OIDCScopes:               getEnv("CAIRN_OIDC_SCOPES", "openid profile email"),
 		TrustedProxy:             getEnvBool("CAIRN_TRUSTED_PROXY", true),
 		SMTPHost:                 getEnv("CAIRN_SMTP_HOST", ""),
 		SMTPPort:                 getEnvInt("CAIRN_SMTP_PORT", 587),

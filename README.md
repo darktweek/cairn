@@ -123,12 +123,54 @@ Les valeurs sensibles vont dans `.env` (gitignored).
 | `CAIRN_BOOKMARKLET_TOKEN_LIFETIME` | `90` | non | Durée de vie du token bookmarklet (jours) |
 | `CAIRN_TOTP_ISSUER` | `Cairn` | non | Nom affiché dans l'app authenticator |
 | `CAIRN_TRUSTED_PROXY` | `true` | non | Lire `CF-Connecting-IP` / `X-Forwarded-For` |
+| `CAIRN_MENU_BANG` | — | non | Bang du menu plein écran. Vide = éditable dans l'admin (défaut `!menu`) |
+| `CAIRN_OIDC_ISSUER` | — | non | URL issuer OIDC. Si défini, verrouille la config SSO (sinon éditable en admin) |
+| `CAIRN_OIDC_CLIENT_ID` | — | non | Client ID OIDC |
+| `CAIRN_OIDC_CLIENT_SECRET` | — | non | Client Secret OIDC (mettre dans `.env`) |
+| `CAIRN_OIDC_PROVIDER_NAME` | `SSO` | non | Nom affiché sur le bouton « Se connecter avec … » |
+| `CAIRN_OIDC_SCOPES` | `openid profile email` | non | Scopes demandés |
 | `CAIRN_SMTP_HOST` | — | **oui** | Serveur SMTP |
 | `CAIRN_SMTP_PORT` | `587` | non | Port SMTP |
 | `CAIRN_SMTP_USER` | — | **oui** | Utilisateur SMTP |
 | `CAIRN_SMTP_PASS` | — | **oui** | Mot de passe SMTP |
 | `CAIRN_SMTP_FROM` | — | **oui** | Adresse expéditeur |
 | `CAIRN_SMTP_TLS` | `true` | non | STARTTLS activé |
+
+---
+
+## Menu
+
+Cairn n'a pas de barre de navigation. Le menu s'ouvre en tapant un **bang** dans
+la barre de recherche (défaut `!menu`) : il morph en hub plein écran avec des
+tuiles (Marque-pages, Compte, Administration, Déconnexion).
+
+Le bang est configurable : via `CAIRN_MENU_BANG` (verrouillé) ou depuis
+**Admin → Réglages → Menu**.
+
+---
+
+## SSO (OpenID Connect)
+
+Cairn s'intègre à n'importe quel fournisseur OIDC standard (Authentik, Keycloak,
+Authelia, Google…) via le flux Authorization Code + PKCE, sans dépendance externe.
+
+Quand un provider est configuré, la page de connexion affiche un bouton
+**« Se connecter avec <nom du provider> »** au-dessus du formulaire classique.
+Les comptes sont provisionnés à la volée (JIT) au premier login, liés par email.
+Si aucun provider n'est configuré : email + mot de passe + TOTP (MFA optionnel).
+
+**Configuration** — deux options :
+
+1. **Via le compose** (`CAIRN_OIDC_*`) — verrouille la config.
+2. **Via l'admin** — **Admin → Réglages → SSO** si rien n'est défini dans le compose.
+
+**Redirect URI** à déclarer côté provider :
+
+```
+<CAIRN_BASE_URL>/api/auth/sso/callback
+```
+
+Exemple pour Authentik : issuer `https://auth.example.com/application/o/<slug>/`.
 
 ---
 

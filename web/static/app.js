@@ -1150,7 +1150,72 @@ function buildAdminSettings() {
   };
 
   frag.append(title, desc, row, msg);
+  frag.append(buildAdminSSO());
   return frag;
+}
+
+function buildAdminSSO() {
+  const wrap = el('div');
+  wrap.style.marginTop = '2rem';
+  const title = el('div', 'settings-section-title', 'SSO (OpenID Connect)');
+  const desc = el('p', 'text-sm text-dim mb-1',
+    'Connecte un fournisseur OIDC (Authentik, Keycloak, etc.). Le bouton « Se connecter avec … » apparaîtra sur la page de connexion. Redirect URI à déclarer côté provider : ' + location.origin + '/api/auth/sso/callback');
+
+  const mkField = (labelTxt, ph, type) => {
+    const g = el('div', 'form-group');
+    g.appendChild(el('label', 'form-label', labelTxt));
+    const i = el('input', 'form-input');
+    i.type = type || 'text'; i.placeholder = ph || '';
+    g.appendChild(i);
+    return { g, i };
+  };
+
+  const fName   = mkField('Nom affiché', 'Authentik');
+  const fIssuer = mkField('Issuer URL', 'https://auth.exemple.com/application/o/cairn/');
+  const fClient = mkField('Client ID', '');
+  const fSecret = mkField('Client Secret', 'Laisser vide pour conserver', 'password');
+  const fScopes = mkField('Scopes', 'openid profile email');
+  const saveBtn = el('button', 'btn btn-primary', 'Enregistrer le SSO');
+  const msg = el('div', 'error-msg');
+  const status = el('div', 'text-sm text-dimmer mb-1');
+
+  GET('/admin/settings/sso').then(s => {
+    fName.i.value   = s.provider_name || '';
+    fIssuer.i.value = s.issuer || '';
+    fClient.i.value = s.client_id || '';
+    fScopes.i.value = s.scopes || '';
+    if (s.has_secret) fSecret.i.placeholder = '•••••••• (laisser vide pour conserver)';
+    status.textContent = s.enabled ? '● SSO actif' : '○ SSO inactif';
+    status.style.color = s.enabled ? 'var(--success)' : 'var(--text-dimmer)';
+    if (s.locked) {
+      [fName, fIssuer, fClient, fSecret, fScopes].forEach(f => f.i.disabled = true);
+      saveBtn.disabled = true;
+      msg.className = 'text-sm text-dimmer';
+      msg.textContent = 'Configuré via le compose (CAIRN_OIDC_*) — non modifiable ici.';
+    }
+  }).catch(e => { msg.textContent = e.message; });
+
+  saveBtn.onclick = async () => {
+    msg.className = 'error-msg'; msg.textContent = '';
+    try {
+      const r = await PUT('/admin/settings/sso', {
+        provider_name: fName.i.value.trim(),
+        issuer:        fIssuer.i.value.trim(),
+        client_id:     fClient.i.value.trim(),
+        client_secret: fSecret.i.value,
+        scopes:        fScopes.i.value.trim(),
+      });
+      fSecret.i.value = '';
+      if (r.has_secret) fSecret.i.placeholder = '•••••••• (laisser vide pour conserver)';
+      status.textContent = r.enabled ? '● SSO actif' : '○ SSO inactif';
+      status.style.color = r.enabled ? 'var(--success)' : 'var(--text-dimmer)';
+      msg.className = 'text-sm text-dim';
+      msg.textContent = 'Enregistré.';
+    } catch (e) { msg.className = 'error-msg'; msg.textContent = e.message; }
+  };
+
+  wrap.append(title, desc, status, fName.g, fIssuer.g, fClient.g, fSecret.g, fScopes.g, saveBtn, msg);
+  return wrap;
 }
 
 function buildAdminInvitations() {
@@ -1252,6 +1317,23 @@ async function createUser() {
   } catch (e) { setError('nu-error', e.message); }
 }
 
+/* ─── SSO ────────────────────────────────────────────────────────────────── */
+async function checkSSO() {
+  // Surface a provider error returned via the callback redirect.
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('sso_error')) {
+    setError('login-error', 'Échec de la connexion SSO. Réessaie ou utilise tes identifiants.');
+    window.history.replaceState({}, '', '/');
+  }
+  try {
+    const cfg = await GET('/auth/sso/config');
+    if (cfg.enabled) {
+      $('sso-provider').textContent = cfg.provider_name || 'SSO';
+      show('sso-block');
+    }
+  } catch { /* SSO not configured — ignore */ }
+}
+
 /* ─── Invite token handling ──────────────────────────────────────────────── */
 async function checkInviteToken() {
   const params = new URLSearchParams(window.location.search);
@@ -1281,6 +1363,7 @@ async function boot() {
   } catch {
     hide('view-home');
     show('view-login');
+    await checkSSO();
     await checkInviteToken();
     if (!document.getElementById('register-form').classList.contains('hidden')) return;
     $('login-email').focus();
