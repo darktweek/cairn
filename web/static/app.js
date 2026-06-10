@@ -240,6 +240,12 @@ function closeHub() {
   setTimeout(() => { el.classList.remove('closing'); hide('hub-overlay'); }, 220);
 }
 
+// Close a sub-panel and step back to the hub menu (one level up).
+function backToHub(panelId) {
+  hide(panelId);
+  openHub();
+}
+
 /* ─── Login ──────────────────────────────────────────────────────────────── */
 async function handleLogin(e) {
   e.preventDefault();
@@ -335,7 +341,7 @@ function openBookmarks() {
 }
 
 function closeBookmarks() {
-  hide('overlay-bookmarks');
+  backToHub('overlay-bookmarks');
 }
 
 async function loadBookmarks() {
@@ -570,7 +576,7 @@ function openSettings() {
 }
 
 function closeSettings() {
-  hide('overlay-settings');
+  backToHub('overlay-settings');
 }
 
 function renderSettingsTab(tabName) {
@@ -969,7 +975,7 @@ function openAdmin() {
 }
 
 function closeAdmin() {
-  hide('overlay-admin');
+  backToHub('overlay-admin');
 }
 
 function renderAdminTab(tabName) {
@@ -1087,6 +1093,27 @@ function buildAdminUsers() {
   return frag;
 }
 
+const AUDIT_LABELS = {
+  login:                            'Connexion',
+  login_sso:                        'Connexion SSO',
+  login_failed:                     'Échec de connexion',
+  logout:                           'Déconnexion',
+  password_change:                  'Mot de passe modifié',
+  totp_enabled:                     'TOTP activé',
+  totp_disabled:                    'TOTP désactivé',
+  user_created:                     'Compte créé',
+  user_created_sso:                 'Compte créé (SSO)',
+  user_deleted:                     'Compte supprimé',
+  user_suspended:                   'Compte suspendu',
+  register_blocked_duplicate_email: 'Inscription bloquée (email déjà utilisé)',
+  bookmark_import:                  'Import de marque-pages',
+  wallpaper_upload:                 'Fond d’écran ajouté',
+  wallpaper_delete:                 'Fond d’écran supprimé',
+};
+function auditLabel(action) {
+  return AUDIT_LABELS[action] || action.replace(/_/g, ' ');
+}
+
 function buildAdminAudit() {
   const frag  = document.createDocumentFragment();
   const list  = el('div'); list.id = 'admin-audit-list';
@@ -1098,9 +1125,9 @@ function buildAdminAudit() {
     if (!entries.length) { list.textContent = 'Aucune entrée.'; return; }
     for (const e of entries) {
       const row    = el('div', 'audit-row');
-      const action = el('span', 'audit-action', e.action);
+      const action = el('span', 'audit-action', auditLabel(e.action));
       const ip     = el('span', 'audit-ip', e.ip || '—');
-      const user   = el('span', 'audit-user', e.user_id ? e.user_id.slice(0,8) + '…' : 'système');
+      const user   = el('span', 'audit-user', e.username || (e.user_id ? '—' : 'système'));
       const time   = el('span', 'audit-time',
         new Date(e.created_at * 1000).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }));
       row.append(action, ip, user, time);
@@ -1449,23 +1476,22 @@ document.addEventListener('DOMContentLoaded', () => {
   $('nu-save').addEventListener('click', createUser);
   $('nu-cancel').addEventListener('click', () => hide('modal-new-user'));
 
-  // Close overlays on backdrop click
-  ['overlay-bookmarks','overlay-settings','overlay-admin','modal-bookmark','modal-new-user'].forEach(id => {
-    $(id).addEventListener('click', e => {
-      if (e.target === $(id)) hide(id);
-    });
+  // Backdrop click: panels step back to the hub; modals just close.
+  ['overlay-bookmarks','overlay-settings','overlay-admin'].forEach(id => {
+    $(id).addEventListener('click', e => { if (e.target === $(id)) backToHub(id); });
+  });
+  ['modal-bookmark','modal-new-user'].forEach(id => {
+    $(id).addEventListener('click', e => { if (e.target === $(id)) hide(id); });
   });
 
-  // Keyboard: Escape closes top-most overlay
+  // Keyboard: Escape closes the top-most layer (modals → panels → hub).
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    const overlays = ['modal-bookmark','modal-new-user','overlay-bookmarks','overlay-settings','overlay-admin'];
-    for (const id of overlays) {
-      const el = $(id);
-      if (!el.classList.contains('hidden')) {
-        hide(id);
-        return;
-      }
+    for (const id of ['modal-bookmark','modal-new-user']) {
+      if (!$(id).classList.contains('hidden')) { hide(id); return; }
+    }
+    for (const id of ['overlay-bookmarks','overlay-settings','overlay-admin']) {
+      if (!$(id).classList.contains('hidden')) { backToHub(id); return; }
     }
     if (!$('hub-overlay').classList.contains('hidden')) closeHub();
   });
