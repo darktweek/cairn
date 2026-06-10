@@ -40,6 +40,7 @@ const (
 
 type AuthService interface {
 	Login(ctx context.Context, email, password, totpCode, ip, userAgent string) (*model.Session, string, error)
+	CreateSessionForUser(ctx context.Context, userID, ip, userAgent string) (*model.Session, string, error)
 	Logout(ctx context.Context, sessionID string) error
 	LogoutForUser(ctx context.Context, sessionID, userID string) error
 	LogoutAll(ctx context.Context, userID string) error
@@ -118,6 +119,24 @@ func (s *authService) Login(ctx context.Context, email, password, totpCode, ip, 
 		CreatedAt: time.Now(),
 	})
 
+	return sess, token, nil
+}
+
+// CreateSessionForUser issues a session for an already-authenticated user
+// (used by the SSO callback after the provider verified the identity).
+func (s *authService) CreateSessionForUser(ctx context.Context, userID, ip, userAgent string) (*model.Session, string, error) {
+	sess, token, err := s.createSession(ctx, userID, ip, userAgent, false)
+	if err != nil {
+		return nil, "", err
+	}
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:        ulid.Make().String(),
+		UserID:    &userID,
+		Action:    "login_sso",
+		IP:        ip,
+		UserAgent: userAgent,
+		CreatedAt: time.Now(),
+	})
 	return sess, token, nil
 }
 

@@ -112,6 +112,28 @@ html, body {
   letter-spacing: 0.04em;
 }
 
+/* ── SSO ────────────────────────────────────────────── */
+#sso-block { margin-bottom: 0.25rem; }
+#sso-btn { text-decoration: none; display: flex; align-items: center; justify-content: center; }
+.sso-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: var(--text-dimmer);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 1rem 0 0.4rem;
+}
+.sso-divider::before,
+.sso-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.sso-divider span { padding: 0 0.7rem; }
+
 /* ── Home ───────────────────────────────────────────── */
 #view-home { flex-direction: column; }
 

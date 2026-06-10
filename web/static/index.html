@@ -22,6 +22,13 @@
     <div class="login-card">
       <h1 class="login-title">Cairn</h1>
 
+      <div id="sso-block" class="hidden">
+        <a id="sso-btn" class="btn btn-primary btn-full" href="/api/auth/sso/login">
+          Se connecter avec <span id="sso-provider">SSO</span>
+        </a>
+        <div class="sso-divider"><span>ou</span></div>
+      </div>
+
       <form id="login-form" novalidate>
         <div class="form-group">
           <label class="form-label" for="login-email">Email</label>

@@ -32,9 +32,18 @@ services:
       CAIRN_SMTP_PORT:                  "587"
       CAIRN_SMTP_FROM:                  "cairn@example.com"
       CAIRN_SMTP_TLS:                   "true"
+      # Menu — bang qui ouvre le hub plein écran. Vide = éditable dans l'admin (défaut !menu).
+      # CAIRN_MENU_BANG:                "!menu"
+      # SSO / OIDC — décommenter pour verrouiller la config via le compose.
+      # Sinon, configurable depuis l'admin → Réglages → SSO.
+      # Redirect URI à déclarer côté provider : <BASE_URL>/api/auth/sso/callback
+      # CAIRN_OIDC_PROVIDER_NAME:       "Authentik"
+      # CAIRN_OIDC_ISSUER:              "https://auth.example.com/application/o/cairn/"
+      # CAIRN_OIDC_CLIENT_ID:           "cairn"
+      # CAIRN_OIDC_SCOPES:              "openid profile email"
 
     env_file:
-      - .env  # CAIRN_SESSION_SECRET, CAIRN_SMTP_USER, CAIRN_SMTP_PASS
+      - .env  # CAIRN_SESSION_SECRET, CAIRN_SMTP_USER, CAIRN_SMTP_PASS, CAIRN_OIDC_CLIENT_SECRET
 
     networks:
       - traefik_proxy
