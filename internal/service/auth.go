@@ -63,11 +63,12 @@ type resetEntry struct {
 type authService struct {
 	repos       *repository.Repositories
 	cfg         *config.Config
+	settings    SettingsService
 	resetTokens sync.Map // tokenHash → resetEntry
 }
 
-func newAuthService(repos *repository.Repositories, cfg *config.Config) AuthService {
-	return &authService{repos: repos, cfg: cfg}
+func newAuthService(repos *repository.Repositories, cfg *config.Config, settings SettingsService) AuthService {
+	return &authService{repos: repos, cfg: cfg, settings: settings}
 }
 
 // Login authenticates a user. totpCode is optional — if TOTP is enabled and empty, returns ErrTOTPRequired.
@@ -204,10 +205,10 @@ func (s *authService) BeginTOTP(ctx context.Context, userID string) (string, str
 
 	qrURL := fmt.Sprintf(
 		"otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=6&period=30",
-		url.PathEscape(s.cfg.TOTPIssuer),
+		url.PathEscape(s.settings.TOTPIssuer(ctx).Value),
 		url.PathEscape(user.Email),
 		secret,
-		url.QueryEscape(s.cfg.TOTPIssuer),
+		url.QueryEscape(s.settings.TOTPIssuer(ctx).Value),
 	)
 
 	return secret, qrURL, nil
@@ -351,7 +352,7 @@ func (s *authService) createSession(ctx context.Context, userID, ip, userAgent s
 
 	lifetime := sessionLifetime
 	if isBookmarklet {
-		lifetime = bookmarkletLifetime
+		lifetime = time.Duration(s.settings.BookmarkletDays(ctx).Value) * 24 * time.Hour
 	}
 
 	sess := &model.Session{
