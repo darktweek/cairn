@@ -153,8 +153,8 @@ func (h *Handler) BeginTOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{
-		"secret":   secret,
-		"qr_url":   qrURL,
+		"secret": secret,
+		"qr_url": qrURL,
 	})
 }
 
