@@ -78,10 +78,15 @@
                  autocomplete="email" required>
         </div>
         <div id="reg-error" class="error-msg"></div>
-        <div id="reg-success" class="hidden text-sm text-center" style="color:var(--success)"></div>
-        <div class="flex gap-1">
-          <button type="button" id="reg-back" class="btn btn-secondary flex-1" data-i18n="register.back">Back</button>
-          <button type="submit" id="reg-submit" class="btn btn-primary flex-1" data-i18n="register.submit">Request account</button>
+        <div id="reg-fields-footer">
+          <div class="flex gap-1">
+            <button type="button" id="reg-back" class="btn btn-secondary flex-1" data-i18n="register.back">Back</button>
+            <button type="submit" id="reg-submit" class="btn btn-primary flex-1" data-i18n="register.submit">Request account</button>
+          </div>
+        </div>
+        <div id="reg-success" class="hidden">
+          <p class="text-sm text-center mb-1" style="color:var(--success)" id="reg-success-msg"></p>
+          <button type="button" id="reg-back-2" class="btn btn-secondary w-full" data-i18n="register.back">Back</button>
         </div>
       </form>
 

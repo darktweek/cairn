@@ -985,6 +985,8 @@ function showRegisterForm() {
   hide('forgot-form');
   hide('login-links');
   setError('reg-error', '');
+  hide('reg-success');
+  show('reg-fields-footer');
   show('register-form');
   $('reg-username').focus();
 }
@@ -1001,20 +1003,19 @@ function showLoginForm() {
 async function handleRegister(e) {
   e.preventDefault();
   setError('reg-error', '');
-  hide('reg-success');
   const username = $('reg-username').value.trim();
   const email    = $('reg-email').value.trim();
   const btn      = $('reg-submit');
   btn.disabled   = true;
   try {
     await POST('/auth/request-registration', { username, email });
-    $('reg-success').textContent = t('register.sent');
-    show('reg-success');
     $('reg-username').value = '';
     $('reg-email').value    = '';
+    $('reg-success-msg').textContent = t('register.sent');
+    hide('reg-fields-footer');
+    show('reg-success');
   } catch (err) {
     setError('reg-error', err.message);
-  } finally {
     btn.disabled = false;
   }
 }
@@ -1908,15 +1909,6 @@ function fmtBytes(b) {
 function buildAdminUsers() {
   const frag = document.createDocumentFragment();
 
-  const addBtn = el('button', 'btn btn-secondary mb-1', '+ ' + t('admin.user.create'));
-  addBtn.onclick = () => {
-    $('nu-username').value = '';
-    $('nu-email').value    = '';
-    $('nu-password').value = '';
-    setError('nu-error', '');
-    show('modal-new-user');
-  };
-
   const list = el('div'); list.id = 'admin-users-list';
   list.textContent = t('loading');
 
@@ -2030,7 +2022,7 @@ function buildAdminUsers() {
     }
   }).catch(e => { list.textContent = t('error') + ': ' + e.message; });
 
-  frag.append(addBtn, list);
+  frag.append(list);
   return frag;
 }
 
@@ -2667,6 +2659,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('forgot-back').addEventListener('click', showLoginForm);
   $('register-link').addEventListener('click', showRegisterForm);
   $('reg-back').addEventListener('click', showLoginForm);
+  $('reg-back-2').addEventListener('click', showLoginForm);
 
   // Setup page
   $('setup-next-btn').addEventListener('click', setupNext);
