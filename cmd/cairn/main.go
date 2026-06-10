@@ -129,7 +129,16 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 	r.Use(chimw.Recoverer)
 	r.Use(middleware.SecureHeaders)
 	r.Use(middleware.CORS(cfg.BaseURL, cfg.Env))
-	r.Use(middleware.BodyLimit(cfg.MaxUploadSize)) // capped per-route for small endpoints; upload routes need the full size
+	// Global body cap — the wallpaper upload route is excluded because its
+	// limit is per-user (UserBodyLimit below) and may exceed the global default.
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if !(req.Method == http.MethodPost && req.URL.Path == "/api/wallpapers") {
+				req.Body = http.MaxBytesReader(w, req.Body, cfg.MaxUploadSize)
+			}
+			next.ServeHTTP(w, req)
+		})
+	})
 
 	// Rate limit configs.
 	loginRL := middleware.RateLimit(
@@ -232,7 +241,7 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 
 		// Wallpapers
 		r.Get("/api/wallpapers", h.ListWallpapers)
-		r.With(middleware.BodyLimit(cfg.MaxUploadSize)).Post("/api/wallpapers", h.UploadWallpaper)
+		r.With(middleware.UserBodyLimit(cfg.MaxUploadSize)).Post("/api/wallpapers", h.UploadWallpaper)
 		r.Delete("/api/wallpapers/{id}", h.DeleteWallpaper)
 		r.Put("/api/wallpapers/{id}/pin", h.SetWallpaperPinned)
 		r.Put("/api/wallpapers/sort", h.UpdateWallpaperSort)
@@ -253,6 +262,8 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 			r.Put("/api/admin/users/{id}/wallpaper-limit", h.AdminSetWallpaperLimit)
 			r.Put("/api/admin/users/{id}/upload-size-limit", h.AdminSetUploadSizeLimit)
 			r.Put("/api/admin/users/{id}/storage-quota", h.AdminSetStorageQuota)
+			r.Get("/api/admin/pending-registrations", h.AdminListPendingRegistrations)
+			r.Delete("/api/admin/pending-registrations/{id}", h.AdminRevokePendingRegistration)
 			r.Get("/api/admin/audit", h.AdminGetAuditLog)
 			r.Get("/api/admin/stats", h.AdminGetStats)
 

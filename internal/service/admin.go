@@ -22,6 +22,8 @@ type AdminService interface {
 	SetWallpaperLimit(ctx context.Context, adminID, userID string, limit *int) error
 	SetUploadSizeLimit(ctx context.Context, adminID, userID string, limit *int64) error
 	SetStorageQuota(ctx context.Context, adminID, userID string, quota *int64) error
+	ListPendingRegistrations(ctx context.Context) ([]*model.PendingRegistration, error)
+	RevokePendingRegistration(ctx context.Context, adminID, id string) error
 	GetAuditLog(ctx context.Context, offset, limit int, filter repository.AuditFilter) ([]*model.AuditEntry, int, error)
 	GetStats(ctx context.Context) (*model.AdminStats, error)
 }
@@ -159,6 +161,28 @@ func (s *adminService) SetStorageQuota(ctx context.Context, adminID, userID stri
 	user.UpdatedAt = time.Now()
 
 	return s.repos.Users.Update(ctx, user)
+}
+
+func (s *adminService) ListPendingRegistrations(ctx context.Context) ([]*model.PendingRegistration, error) {
+	return s.repos.PendingRegistrations.List(ctx)
+}
+
+func (s *adminService) RevokePendingRegistration(ctx context.Context, adminID, id string) error {
+	if err := s.repos.PendingRegistrations.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:     ulid.Make().String(),
+		UserID: &adminID,
+		Action: "registration_revoked",
+		Metadata: map[string]any{
+			"pending_registration_id": id,
+		},
+		CreatedAt: time.Now(),
+	})
+
+	return nil
 }
 
 func (s *adminService) GetAuditLog(ctx context.Context, offset, limit int, filter repository.AuditFilter) ([]*model.AuditEntry, int, error) {

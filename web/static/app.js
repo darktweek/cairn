@@ -183,6 +183,12 @@ const TRANSLATIONS = {
     'admin.quota':             'Quota stockage',
     'admin.quota.save':        'Enregistrer le quota',
     'admin.quota.reset':       'Remettre au quota global',
+    'admin.limit.file':        'Fichier (Mo)',
+    'admin.limit.storage':     'Stockage (Mo)',
+    'admin.pending.title':     'Demandes d\'inscription en attente',
+    'admin.pending.none':      'Aucune demande en attente.',
+    'admin.pending.revoke':    'Révoquer',
+    'admin.pending.completed': 'complétée',
     'admin.sys.addr':        'Adresse d\'écoute',
     'admin.sys.env':         'Environnement',
     'admin.sys.base_url':    'URL publique',
@@ -433,6 +439,12 @@ const TRANSLATIONS = {
     'admin.quota':             'Storage quota',
     'admin.quota.save':        'Save quota',
     'admin.quota.reset':       'Reset to global default',
+    'admin.limit.file':        'File (MB)',
+    'admin.limit.storage':     'Storage (MB)',
+    'admin.pending.title':     'Pending registration requests',
+    'admin.pending.none':      'No pending requests.',
+    'admin.pending.revoke':    'Revoke',
+    'admin.pending.completed': 'completed',
     'admin.sys.addr':        'Listen address',
     'admin.sys.env':         'Environment',
     'admin.sys.base_url':    'Public URL',
@@ -1946,6 +1958,7 @@ function buildAdminUsers() {
 
       // Inline upload size limit (single file, MB)
       const limitWrap = el('div', 'flex gap-1 items-center');
+      limitWrap.appendChild(el('span', 'text-sm text-dimmer', t('admin.limit.file')));
       const limitInput = el('input', 'form-input form-input-sm');
       limitInput.type = 'number'; limitInput.min = '1'; limitInput.style.width = '5.5rem';
       limitInput.placeholder = t('admin.upload.global');
@@ -1970,6 +1983,7 @@ function buildAdminUsers() {
 
       // Inline storage quota (total, MB)
       const quotaWrap = el('div', 'flex gap-1 items-center');
+      quotaWrap.appendChild(el('span', 'text-sm text-dimmer', t('admin.limit.storage')));
       const quotaInput = el('input', 'form-input form-input-sm');
       quotaInput.type = 'number'; quotaInput.min = '1'; quotaInput.style.width = '5.5rem';
       quotaInput.placeholder = t('admin.upload.global');
@@ -2343,6 +2357,50 @@ function buildAdminInvitations() {
 
   regSection.append(regRow, toggleErr);
   frag.appendChild(regSection);
+
+  // ── Pending open-registration requests ───────────────────────────────────
+  const pendingSection = el('div', 'settings-section');
+  pendingSection.appendChild(el('div', 'settings-section-title', t('admin.pending.title')));
+  const pendingList = el('div');
+  pendingList.textContent = t('loading');
+  pendingSection.appendChild(pendingList);
+
+  GET('/admin/pending-registrations').then(prs => {
+    pendingList.innerHTML = '';
+    if (!prs.length) {
+      pendingList.appendChild(el('p', 'text-sm text-dimmer', t('admin.pending.none')));
+      return;
+    }
+    for (const pr of prs) {
+      const row = el('div', 'admin-user-row');
+
+      const info = el('div');
+      const name = el('span', 'user-name', pr.username);
+      let badge = '';
+      if (pr.completed)    badge = `<span class="badge badge-inactive">${t('admin.pending.completed')}</span>`;
+      else if (pr.expired) badge = `<span class="badge badge-inactive">${t('admin.inv.expired')}</span>`;
+      else                 badge = `<span class="badge badge-admin">${t('admin.inv.pending')}</span>`;
+      name.innerHTML += badge;
+
+      const detail = el('span', 'user-email',
+        ' · ' + pr.email + ' · ' + t('admin.inv.expires') + ' ' +
+        new Date(pr.expires_at * 1000).toLocaleString(_locale, { dateStyle: 'short', timeStyle: 'short' }));
+      info.append(name, detail);
+
+      const acts = el('div', 'flex gap-1');
+      const revokeBtn = el('button', 'btn btn-small btn-danger', t('admin.pending.revoke'));
+      revokeBtn.onclick = async () => {
+        try { await DEL(`/admin/pending-registrations/${pr.id}`); renderAdminTab('invitations'); }
+        catch (e) { alert(e.message); }
+      };
+      acts.appendChild(revokeBtn);
+
+      row.append(info, acts);
+      pendingList.appendChild(row);
+    }
+  }).catch(e => { pendingList.textContent = t('error') + ': ' + e.message; });
+
+  frag.appendChild(pendingSection);
 
   // ── Invite form ──────────────────────────────────────────────────────────
   const inviteSection = el('div', 'settings-section');

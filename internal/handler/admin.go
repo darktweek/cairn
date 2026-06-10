@@ -171,6 +171,42 @@ func (h *Handler) AdminSetStorageQuota(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// AdminListPendingRegistrations — GET /api/admin/pending-registrations
+// Open-registration requests awaiting email confirmation. Token hashes and
+// TOTP secrets are never exposed.
+func (h *Handler) AdminListPendingRegistrations(w http.ResponseWriter, r *http.Request) {
+	prs, err := h.Admin.ListPendingRegistrations(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out := make([]map[string]any, 0, len(prs))
+	for _, pr := range prs {
+		out = append(out, map[string]any{
+			"id":         pr.ID,
+			"username":   pr.Username,
+			"email":      pr.Email,
+			"expires_at": pr.ExpiresAt.Unix(),
+			"created_at": pr.CreatedAt.Unix(),
+			"completed":  pr.IsCompleted(),
+			"expired":    pr.IsExpired(),
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// AdminRevokePendingRegistration — DELETE /api/admin/pending-registrations/{id}
+func (h *Handler) AdminRevokePendingRegistration(w http.ResponseWriter, r *http.Request) {
+	admin := middleware.UserFromCtx(r.Context())
+	id := chi.URLParam(r, "id")
+
+	if err := h.Admin.RevokePendingRegistration(r.Context(), admin.ID, id); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) AdminGetAuditLog(w http.ResponseWriter, r *http.Request) {
 	offset, limit := pageParams(r)
 	q := r.URL.Query()
