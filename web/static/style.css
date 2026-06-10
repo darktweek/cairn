@@ -191,6 +191,20 @@ html, body {
 }
 .hub-close:hover { color: var(--text); background: var(--btn-bg); }
 
+.hub-setup {
+  width: 100%;
+  text-align: left;
+  background: rgba(255,170,60,0.12);
+  border: 1px solid var(--danger);
+  color: var(--text);
+  border-radius: 0.7rem;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.hub-setup:hover { background: rgba(255,170,60,0.20); }
+
 .hub-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

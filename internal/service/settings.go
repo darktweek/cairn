@@ -31,11 +31,31 @@ type SettingsService interface {
 	BookmarkletDays(ctx context.Context) IntSetting
 	SetRuntime(ctx context.Context, totpIssuer string, wallpaperLimit, bookmarkletDays int) error
 
+	SMTP(ctx context.Context) SMTPSettings
+	SetSMTP(ctx context.Context, in SMTPSettings) error
+
 	SystemInfo() SystemInfo
 }
 
-// SystemInfo holds compose-managed values shown read-only in the admin panel.
-// Secrets are never included as plaintext — only a "set" boolean.
+// SMTPSettings is the resolved mail configuration. When Locked it comes from the
+// environment (compose) and is read-only in the admin panel.
+type SMTPSettings struct {
+	Host   string
+	Port   int
+	User   string
+	Pass   string
+	From   string
+	TLS    bool
+	Locked bool
+}
+
+// Configured reports whether outgoing mail can be sent.
+func (c SMTPSettings) Configured() bool {
+	return c.Host != "" && c.From != ""
+}
+
+// SystemInfo holds compose-managed infrastructure values shown read-only in the
+// admin panel. Secrets are never included as plaintext — only a "set" boolean.
 type SystemInfo struct {
 	Addr             string
 	Env              string
@@ -45,12 +65,6 @@ type SystemInfo struct {
 	MaxUploadSize    int64
 	TrustedProxy     bool
 	SessionSecretSet bool
-	SMTPHost         string
-	SMTPPort         int
-	SMTPUser         string
-	SMTPFrom         string
-	SMTPTLS          bool
-	SMTPPassSet      bool
 }
 
 // StringSetting / IntSetting carry a resolved value plus whether it is
@@ -184,13 +198,71 @@ func (s *settingsService) SystemInfo() SystemInfo {
 		MaxUploadSize:    s.cfg.MaxUploadSize,
 		TrustedProxy:     s.cfg.TrustedProxy,
 		SessionSecretSet: s.cfg.SessionSecret != "",
-		SMTPHost:         s.cfg.SMTPHost,
-		SMTPPort:         s.cfg.SMTPPort,
-		SMTPUser:         s.cfg.SMTPUser,
-		SMTPFrom:         s.cfg.SMTPFrom,
-		SMTPTLS:          s.cfg.SMTPTLS,
-		SMTPPassSet:      s.cfg.SMTPPass != "",
 	}
+}
+
+// SMTP resolves the mail configuration. The environment takes priority and
+// locks editing; otherwise values come from the admin-managed settings table.
+func (s *settingsService) SMTP(ctx context.Context) SMTPSettings {
+	if _, ok := os.LookupEnv("CAIRN_SMTP_HOST"); ok {
+		return SMTPSettings{
+			Host:   s.cfg.SMTPHost,
+			Port:   s.cfg.SMTPPort,
+			User:   s.cfg.SMTPUser,
+			Pass:   s.cfg.SMTPPass,
+			From:   s.cfg.SMTPFrom,
+			TLS:    s.cfg.SMTPTLS,
+			Locked: true,
+		}
+	}
+	get := func(k string) string {
+		v, _ := s.repos.Invitations.GetSetting(ctx, k)
+		return v
+	}
+	port := 587
+	if n, err := strconv.Atoi(get("smtp_port")); err == nil && n > 0 {
+		port = n
+	}
+	return SMTPSettings{
+		Host: get("smtp_host"),
+		Port: port,
+		User: get("smtp_user"),
+		Pass: get("smtp_pass"),
+		From: get("smtp_from"),
+		TLS:  get("smtp_tls") != "false",
+	}
+}
+
+func (s *settingsService) SetSMTP(ctx context.Context, in SMTPSettings) error {
+	if _, ok := os.LookupEnv("CAIRN_SMTP_HOST"); ok {
+		return ErrForbidden // env-locked
+	}
+	set := func(k, v string) error { return s.repos.Invitations.SetSetting(ctx, k, v) }
+	if err := set("smtp_host", strings.TrimSpace(in.Host)); err != nil {
+		return err
+	}
+	if in.Port > 0 {
+		if err := set("smtp_port", strconv.Itoa(in.Port)); err != nil {
+			return err
+		}
+	}
+	if err := set("smtp_user", strings.TrimSpace(in.User)); err != nil {
+		return err
+	}
+	// Only overwrite the password when a new non-empty value is provided.
+	if strings.TrimSpace(in.Pass) != "" {
+		if err := set("smtp_pass", in.Pass); err != nil {
+			return err
+		}
+	}
+	if err := set("smtp_from", strings.TrimSpace(in.From)); err != nil {
+		return err
+	}
+	tls := "true"
+	if !in.TLS {
+		tls = "false"
+	}
+	return set("smtp_tls", tls)
 }
 
 // ── Runtime settings (env > DB > default) ──────────────────────────────────

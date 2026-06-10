@@ -30,10 +30,12 @@ services:
       # CAIRN_TOTP_ISSUER:                "Cairn"
       # CAIRN_DEFAULT_WALLPAPER_LIMIT:    "10"
       # CAIRN_BOOKMARKLET_TOKEN_LIFETIME: "90"
-      CAIRN_SMTP_HOST:                  "smtp.example.com"
-      CAIRN_SMTP_PORT:                  "587"
-      CAIRN_SMTP_FROM:                  "cairn@example.com"
-      CAIRN_SMTP_TLS:                   "true"
+      # Email (SMTP) — laissé non défini : à configurer via le setup web
+      # (Admin → Réglages → Système → Email). Décommenter pour verrouiller.
+      # CAIRN_SMTP_HOST:                  "smtp.example.com"
+      # CAIRN_SMTP_PORT:                  "587"
+      # CAIRN_SMTP_FROM:                  "cairn@example.com"
+      # CAIRN_SMTP_TLS:                   "true"
       # Menu — bang qui ouvre le hub plein écran. Vide = éditable dans l'admin (défaut !menu).
       # CAIRN_MENU_BANG:                "!menu"
       # SSO / OIDC — décommenter pour verrouiller la config via le compose.
@@ -45,7 +47,7 @@ services:
       # CAIRN_OIDC_SCOPES:              "openid profile email"
 
     env_file:
-      - .env  # CAIRN_SESSION_SECRET, CAIRN_SMTP_USER, CAIRN_SMTP_PASS, CAIRN_OIDC_CLIENT_SECRET
+      - .env  # CAIRN_SESSION_SECRET (requis) ; CAIRN_SMTP_USER/PASS et CAIRN_OIDC_CLIENT_SECRET si verrouillés via compose
 
     networks:
       - traefik_proxy
