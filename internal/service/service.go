@@ -20,7 +20,7 @@ type Services struct {
 func New(repos *repository.Repositories, cfg *config.Config) *Services {
 	settings := newSettingsService(repos, cfg)
 	auth     := newAuthService(repos, cfg, settings)
-	email    := newEmailService(cfg)
+	email    := newEmailService(cfg, settings)
 	return &Services{
 		Auth:       auth,
 		User:       newUserService(repos, cfg),

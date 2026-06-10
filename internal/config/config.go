@@ -101,18 +101,10 @@ func (c *Config) validate() error {
 	if c.Env != "production" && c.Env != "development" {
 		errs = append(errs, fmt.Errorf("CAIRN_ENV must be 'production' or 'development', got %q", c.Env))
 	}
-	if c.SMTPHost == "" {
-		errs = append(errs, errors.New("CAIRN_SMTP_HOST is required"))
-	}
-	if c.SMTPUser == "" {
-		errs = append(errs, errors.New("CAIRN_SMTP_USER is required"))
-	}
-	if c.SMTPPass == "" {
-		errs = append(errs, errors.New("CAIRN_SMTP_PASS is required"))
-	}
-	if c.SMTPFrom == "" {
-		errs = append(errs, errors.New("CAIRN_SMTP_FROM is required"))
-	}
+
+	// SMTP is intentionally not required here: if it is not provided via the
+	// environment, an admin configures it through the web setup, after which it
+	// is stored in the database and used at send time.
 
 	return errors.Join(errs...)
 }

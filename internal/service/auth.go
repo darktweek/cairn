@@ -29,8 +29,7 @@ import (
 
 const (
 	sessionLifetime    = 30 * 24 * time.Hour
-	bookmarkletLifetime = 90 * 24 * time.Hour
-	resetTokenLifetime  = 1 * time.Hour
+	resetTokenLifetime = 1 * time.Hour
 	argon2Time         = 1
 	argon2Memory       = 64 * 1024 // 64 MB
 	argon2Threads      = 4

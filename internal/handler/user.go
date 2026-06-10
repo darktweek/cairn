@@ -23,6 +23,7 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 		"wallpaper_limit":   user.WallpaperLimit,
 		"created_at":        user.CreatedAt.Unix(),
 		"menu_bang":         h.Settings.MenuBang(r.Context()),
+		"smtp_configured":   h.Settings.SMTP(r.Context()).Configured(),
 	})
 }
 

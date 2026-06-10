@@ -229,7 +229,10 @@ function open(url) { window.location.href = url; }
 
 /* ─── Hub (menu bang) ────────────────────────────────────────────────────── */
 function openHub() {
-  toggle('tile-admin', S.user && S.user.role === 'admin');
+  const isAdmin = S.user && S.user.role === 'admin';
+  toggle('tile-admin', isAdmin);
+  // Setup prompt: admins see it when a mandatory prerequisite (SMTP) is missing.
+  toggle('hub-setup', isAdmin && S.user && S.user.smtp_configured === false);
   const g = $('hub-greeting');
   if (g && S.user) g.textContent = S.user.username;
   show('hub-overlay');
@@ -1233,8 +1236,19 @@ function buildAdminSystem() {
   const saveBtn = el('button', 'btn btn-primary', 'Enregistrer');
   const msg = el('div', 'error-msg');
 
-  // Read-only system info
-  const roWrap = el('div'); roWrap.style.marginTop = '1.2rem';
+  // SMTP (editable unless env-locked)
+  const smtpWrap = el('div'); smtpWrap.style.marginTop = '1.6rem';
+  const fHost = (() => { const g = el('div','form-group'); g.appendChild(el('label','form-label','Serveur SMTP')); const i = el('input','form-input'); i.placeholder='smtp.exemple.com'; g.appendChild(i); return {g,i}; })();
+  const fPort = mkNum('Port', '587');
+  const fUser = (() => { const g = el('div','form-group'); g.appendChild(el('label','form-label','Utilisateur')); const i = el('input','form-input'); g.appendChild(i); return {g,i}; })();
+  const fPass = (() => { const g = el('div','form-group'); g.appendChild(el('label','form-label','Mot de passe')); const i = el('input','form-input'); i.type='password'; i.placeholder='Laisser vide pour conserver'; g.appendChild(i); return {g,i}; })();
+  const fFrom = (() => { const g = el('div','form-group'); g.appendChild(el('label','form-label','Expéditeur')); const i = el('input','form-input'); i.type='email'; i.placeholder='cairn@exemple.com'; g.appendChild(i); return {g,i}; })();
+  const fTls  = (() => { const g = el('div','form-group flex gap-1'); const i = el('input'); i.type='checkbox'; const l = el('label','form-label','TLS (STARTTLS)'); g.append(i,l); return {g,i}; })();
+  const smtpStatus = el('div', 'text-sm text-dimmer mb-1');
+  const smtpMsg = el('div', 'error-msg');
+
+  // Read-only infrastructure
+  const roWrap = el('div'); roWrap.style.marginTop = '1.6rem';
 
   const lockField = (f, locked) => { if (locked) { f.i.disabled = true; f.i.title = 'Défini dans le compose'; } };
 
@@ -1242,6 +1256,22 @@ function buildAdminSystem() {
     fTotp.i.value = s.editable.totp_issuer.value;     lockField(fTotp, s.editable.totp_issuer.locked);
     fWp.i.value   = s.editable.wallpaper_limit.value;  lockField(fWp,   s.editable.wallpaper_limit.locked);
     fBm.i.value   = s.editable.bookmarklet_days.value; lockField(fBm,   s.editable.bookmarklet_days.locked);
+
+    // SMTP
+    fHost.i.value = s.smtp.host || '';
+    fPort.i.value = s.smtp.port || 587;
+    fUser.i.value = s.smtp.user || '';
+    fFrom.i.value = s.smtp.from || '';
+    fTls.i.checked = !!s.smtp.tls;
+    if (s.smtp.has_password) fPass.i.placeholder = '•••••••• (laisser vide pour conserver)';
+    smtpStatus.textContent = s.smtp.configured ? '● Email configuré' : '○ Email non configuré — les invitations et réinitialisations ne fonctionneront pas';
+    smtpStatus.style.color = s.smtp.configured ? 'var(--success)' : 'var(--danger)';
+    if (s.smtp.locked) {
+      [fHost,fPort,fUser,fPass,fFrom,fTls].forEach(f => f.i.disabled = true);
+      smtpSaveBtn.disabled = true;
+      smtpMsg.className = 'text-sm text-dimmer';
+      smtpMsg.textContent = 'Configuré via le compose (CAIRN_SMTP_*) — non modifiable ici.';
+    }
 
     roWrap.innerHTML = '';
     roWrap.appendChild(el('div', 'settings-section-title', 'Infrastructure (compose · lecture seule)'));
@@ -1254,11 +1284,6 @@ function buildAdminSystem() {
       ['Taille max upload', fmtBytes(s.system.max_upload_size)],
       ['Proxy de confiance', s.system.trusted_proxy ? 'oui' : 'non'],
       ['Secret de session', s.system.session_secret ? '•••••••• défini' : '⚠ non défini'],
-      ['SMTP serveur', `${s.smtp.host}:${s.smtp.port}`],
-      ['SMTP utilisateur', s.smtp.user],
-      ['SMTP expéditeur', s.smtp.from],
-      ['SMTP TLS', s.smtp.tls ? 'oui' : 'non'],
-      ['SMTP mot de passe', s.smtp.has_password ? '•••••••• défini' : '⚠ non défini'],
     ];
     for (const [k, v] of rows) {
       const r = el('div', 'sysinfo-row');
@@ -1279,7 +1304,31 @@ function buildAdminSystem() {
     } catch (e) { msg.className = 'error-msg'; msg.textContent = e.message; }
   };
 
-  wrap.append(fTotp.g, fWp.g, fBm.g, saveBtn, msg, roWrap);
+  const smtpSaveBtn = el('button', 'btn btn-primary', 'Enregistrer le SMTP');
+  smtpSaveBtn.onclick = async () => {
+    smtpMsg.className = 'error-msg'; smtpMsg.textContent = '';
+    try {
+      const r = await PUT('/admin/settings/system', { smtp: {
+        host: fHost.i.value.trim(),
+        port: parseInt(fPort.i.value, 10) || 587,
+        user: fUser.i.value.trim(),
+        pass: fPass.i.value,
+        from: fFrom.i.value.trim(),
+        tls:  fTls.i.checked,
+      }});
+      fPass.i.value = '';
+      smtpStatus.textContent = r.smtp.configured ? '● Email configuré' : '○ Email non configuré';
+      smtpStatus.style.color = r.smtp.configured ? 'var(--success)' : 'var(--danger)';
+      // Refresh the cached user flag used by the setup banner.
+      try { S.user = await GET('/me'); } catch {}
+      smtpMsg.className = 'text-sm text-dim'; smtpMsg.textContent = 'Enregistré.';
+    } catch (e) { smtpMsg.className = 'error-msg'; smtpMsg.textContent = e.message; }
+  };
+
+  smtpWrap.append(el('div','settings-section-title','Email (SMTP)'), smtpStatus,
+    fHost.g, fPort.g, fUser.g, fPass.g, fFrom.g, fTls.g, smtpSaveBtn, smtpMsg);
+
+  wrap.append(fTotp.g, fWp.g, fBm.g, saveBtn, msg, smtpWrap, roWrap);
   return wrap;
 }
 
@@ -1541,6 +1590,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('tile-settings').addEventListener('click', () => { closeHub(); openSettings(); });
   $('tile-admin').addEventListener('click', () => { closeHub(); openAdmin(); });
   $('tile-logout').addEventListener('click', () => { closeHub(); logout(); });
+  $('hub-setup').addEventListener('click', () => { closeHub(); openAdmin(); renderAdminTab('settings'); });
 
   // Bookmark overlay
   $('bm-close').addEventListener('click', closeBookmarks);
