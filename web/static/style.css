@@ -890,8 +890,9 @@ html, body {
   font-size: 0.875rem;
 }
 
-.user-name  { flex: 1; color: var(--text); }
+.user-name  { color: var(--text); }
 .user-email { color: var(--text-dimmer); font-size: 0.8rem; }
+.user-stats { color: var(--text-dimmer); font-size: 0.72rem; margin-top: 0.2rem; letter-spacing: 0.02em; }
 
 .badge-admin    { background: rgba(80,160,255,0.2); color: rgba(80,160,255,0.9); }
 .badge-inactive { background: rgba(255,80,80,0.2);  color: rgba(255,80,80,0.9);  }

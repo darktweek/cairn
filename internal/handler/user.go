@@ -107,6 +107,21 @@ func (h *Handler) RevokeAllSessions(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *Handler) GetMyStats(w http.ResponseWriter, r *http.Request) {
+	user := middleware.UserFromCtx(r.Context())
+	st, err := h.User.Stats(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"bookmarks":    st.Bookmarks,
+		"wallpapers":   st.Wallpapers,
+		"sessions":     st.Sessions,
+		"member_since": user.CreatedAt.Unix(),
+	})
+}
+
 func (h *Handler) GetMyAuditLog(w http.ResponseWriter, r *http.Request) {
 	user := middleware.UserFromCtx(r.Context())
 	offset, limit := pageParams(r)
