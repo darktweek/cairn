@@ -20,6 +20,7 @@ type AdminService interface {
 	ActivateUser(ctx context.Context, adminID, userID string) error
 	DeleteUser(ctx context.Context, adminID, userID string) error
 	SetWallpaperLimit(ctx context.Context, adminID, userID string, limit *int) error
+	SetUploadSizeLimit(ctx context.Context, adminID, userID string, limit *int64) error
 	GetAuditLog(ctx context.Context, offset, limit int, filter repository.AuditFilter) ([]*model.AuditEntry, int, error)
 	GetStats(ctx context.Context) (*model.AdminStats, error)
 }
@@ -106,11 +107,9 @@ func (s *adminService) DeleteUser(ctx context.Context, adminID, userID string) e
 	userDir := filepath.Join(s.cfg.MediaPath, userID)
 	_ = os.RemoveAll(userDir)
 
-	if err := s.repos.Users.SoftDelete(ctx, userID); err != nil {
+	if err := s.repos.Users.HardDelete(ctx, userID); err != nil {
 		return err
 	}
-
-	_ = s.repos.Sessions.DeleteByUserID(ctx, userID)
 
 	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
 		ID:     ulid.Make().String(),
@@ -132,6 +131,18 @@ func (s *adminService) SetWallpaperLimit(ctx context.Context, adminID, userID st
 	}
 
 	user.WallpaperLimit = limit
+	user.UpdatedAt = time.Now()
+
+	return s.repos.Users.Update(ctx, user)
+}
+
+func (s *adminService) SetUploadSizeLimit(ctx context.Context, adminID, userID string, limit *int64) error {
+	user, err := s.repos.Users.GetByID(ctx, userID)
+	if err != nil {
+		return ErrNotFound
+	}
+
+	user.UploadSizeLimit = limit
 	user.UpdatedAt = time.Now()
 
 	return s.repos.Users.Update(ctx, user)

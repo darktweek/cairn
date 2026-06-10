@@ -96,19 +96,48 @@ func (c OIDCConfig) Enabled() bool {
 const defaultMenuBang = "!menu"
 
 type settingsService struct {
-	repos *repository.Repositories
-	cfg   *config.Config
+	repos     *repository.Repositories
+	cfg       *config.Config
+	cryptoKey []byte // AES-256 key derived from session secret
 }
 
 func newSettingsService(repos *repository.Repositories, cfg *config.Config) SettingsService {
-	return &settingsService{repos: repos, cfg: cfg}
+	return &settingsService{
+		repos:     repos,
+		cfg:       cfg,
+		cryptoKey: deriveKey(cfg.SessionSecret),
+	}
+}
+
+// encrypt wraps encryptValue using the service key; on failure returns "".
+func (s *settingsService) encrypt(plaintext string) string {
+	if plaintext == "" {
+		return ""
+	}
+	v, err := encryptValue(s.cryptoKey, plaintext)
+	if err != nil {
+		return ""
+	}
+	return v
+}
+
+// decrypt wraps decryptValue; on failure returns "" (e.g. plaintext legacy value).
+func (s *settingsService) decrypt(ciphertext string) string {
+	if ciphertext == "" {
+		return ""
+	}
+	v, err := decryptValue(s.cryptoKey, ciphertext)
+	if err != nil {
+		return "" // unreadable or pre-encryption legacy value
+	}
+	return v
 }
 
 func (s *settingsService) MenuBang(ctx context.Context) string {
 	if s.cfg.MenuBang != "" {
 		return s.cfg.MenuBang // env-locked
 	}
-	if v, err := s.repos.Invitations.GetSetting(ctx, "menu_bang"); err == nil && v != "" {
+	if v, err := s.repos.Settings.Get(ctx, "menu_bang"); err == nil && v != "" {
 		return v
 	}
 	return defaultMenuBang
@@ -121,7 +150,7 @@ func (s *settingsService) SetMenuBang(ctx context.Context, bang string) error {
 	if bang == "" || bang[0] != '!' || len(bang) < 2 {
 		return ErrInvalidInput
 	}
-	return s.repos.Invitations.SetSetting(ctx, "menu_bang", bang)
+	return s.repos.Settings.Set(ctx, "menu_bang", bang)
 }
 
 func (s *settingsService) MenuBangLocked() bool { return s.cfg.MenuBang != "" }
@@ -140,13 +169,13 @@ func (s *settingsService) OIDC(ctx context.Context) OIDCConfig {
 		}
 	}
 	get := func(k string) string {
-		v, _ := s.repos.Invitations.GetSetting(ctx, k)
+		v, _ := s.repos.Settings.Get(ctx, k)
 		return v
 	}
 	return OIDCConfig{
 		Issuer:       get("oidc_issuer"),
 		ClientID:     get("oidc_client_id"),
-		ClientSecret: get("oidc_client_secret"),
+		ClientSecret: s.decrypt(get("oidc_client_secret")),
 		ProviderName: orDefault(get("oidc_provider_name"), "SSO"),
 		Scopes:       orDefault(get("oidc_scopes"), "openid profile email"),
 		Locked:       false,
@@ -157,7 +186,7 @@ func (s *settingsService) SetOIDC(ctx context.Context, in OIDCConfig) error {
 	if s.cfg.OIDCIssuer != "" {
 		return ErrForbidden // env-locked
 	}
-	set := func(k, v string) error { return s.repos.Invitations.SetSetting(ctx, k, v) }
+	set := func(k, v string) error { return s.repos.Settings.Set(ctx, k, v) }
 	if err := set("oidc_issuer", strings.TrimSpace(in.Issuer)); err != nil {
 		return err
 	}
@@ -166,7 +195,7 @@ func (s *settingsService) SetOIDC(ctx context.Context, in OIDCConfig) error {
 	}
 	// Only overwrite the secret when a new non-empty value is provided.
 	if strings.TrimSpace(in.ClientSecret) != "" {
-		if err := set("oidc_client_secret", strings.TrimSpace(in.ClientSecret)); err != nil {
+		if err := set("oidc_client_secret", s.encrypt(strings.TrimSpace(in.ClientSecret))); err != nil {
 			return err
 		}
 	}
@@ -216,7 +245,7 @@ func (s *settingsService) SMTP(ctx context.Context) SMTPSettings {
 		}
 	}
 	get := func(k string) string {
-		v, _ := s.repos.Invitations.GetSetting(ctx, k)
+		v, _ := s.repos.Settings.Get(ctx, k)
 		return v
 	}
 	port := 587
@@ -227,7 +256,7 @@ func (s *settingsService) SMTP(ctx context.Context) SMTPSettings {
 		Host: get("smtp_host"),
 		Port: port,
 		User: get("smtp_user"),
-		Pass: get("smtp_pass"),
+		Pass: s.decrypt(get("smtp_pass")),
 		From: get("smtp_from"),
 		TLS:  get("smtp_tls") != "false",
 	}
@@ -237,7 +266,7 @@ func (s *settingsService) SetSMTP(ctx context.Context, in SMTPSettings) error {
 	if _, ok := os.LookupEnv("CAIRN_SMTP_HOST"); ok {
 		return ErrForbidden // env-locked
 	}
-	set := func(k, v string) error { return s.repos.Invitations.SetSetting(ctx, k, v) }
+	set := func(k, v string) error { return s.repos.Settings.Set(ctx, k, v) }
 	if err := set("smtp_host", strings.TrimSpace(in.Host)); err != nil {
 		return err
 	}
@@ -251,7 +280,7 @@ func (s *settingsService) SetSMTP(ctx context.Context, in SMTPSettings) error {
 	}
 	// Only overwrite the password when a new non-empty value is provided.
 	if strings.TrimSpace(in.Pass) != "" {
-		if err := set("smtp_pass", in.Pass); err != nil {
+		if err := set("smtp_pass", s.encrypt(in.Pass)); err != nil {
 			return err
 		}
 	}
@@ -271,7 +300,7 @@ func (s *settingsService) TOTPIssuer(ctx context.Context) StringSetting {
 	if _, ok := os.LookupEnv("CAIRN_TOTP_ISSUER"); ok {
 		return StringSetting{Value: s.cfg.TOTPIssuer, Locked: true}
 	}
-	if v, err := s.repos.Invitations.GetSetting(ctx, "totp_issuer"); err == nil && v != "" {
+	if v, err := s.repos.Settings.Get(ctx, "totp_issuer"); err == nil && v != "" {
 		return StringSetting{Value: v}
 	}
 	return StringSetting{Value: orDefault(s.cfg.TOTPIssuer, "Cairn")}
@@ -281,7 +310,7 @@ func (s *settingsService) WallpaperLimit(ctx context.Context) IntSetting {
 	if _, ok := os.LookupEnv("CAIRN_DEFAULT_WALLPAPER_LIMIT"); ok {
 		return IntSetting{Value: s.cfg.DefaultWallpaperLimit, Locked: true}
 	}
-	if v, err := s.repos.Invitations.GetSetting(ctx, "wallpaper_limit"); err == nil && v != "" {
+	if v, err := s.repos.Settings.Get(ctx, "wallpaper_limit"); err == nil && v != "" {
 		if n, e := strconv.Atoi(v); e == nil {
 			return IntSetting{Value: n}
 		}
@@ -293,7 +322,7 @@ func (s *settingsService) BookmarkletDays(ctx context.Context) IntSetting {
 	if _, ok := os.LookupEnv("CAIRN_BOOKMARKLET_TOKEN_LIFETIME"); ok {
 		return IntSetting{Value: s.cfg.BookmarkletTokenLifetime, Locked: true}
 	}
-	if v, err := s.repos.Invitations.GetSetting(ctx, "bookmarklet_days"); err == nil && v != "" {
+	if v, err := s.repos.Settings.Get(ctx, "bookmarklet_days"); err == nil && v != "" {
 		if n, e := strconv.Atoi(v); e == nil {
 			return IntSetting{Value: n}
 		}
@@ -305,17 +334,17 @@ func (s *settingsService) BookmarkletDays(ctx context.Context) IntSetting {
 // are ignored (cannot be overridden from the panel).
 func (s *settingsService) SetRuntime(ctx context.Context, totpIssuer string, wallpaperLimit, bookmarkletDays int) error {
 	if !s.TOTPIssuer(ctx).Locked && strings.TrimSpace(totpIssuer) != "" {
-		if err := s.repos.Invitations.SetSetting(ctx, "totp_issuer", strings.TrimSpace(totpIssuer)); err != nil {
+		if err := s.repos.Settings.Set(ctx, "totp_issuer", strings.TrimSpace(totpIssuer)); err != nil {
 			return err
 		}
 	}
 	if !s.WallpaperLimit(ctx).Locked && wallpaperLimit > 0 {
-		if err := s.repos.Invitations.SetSetting(ctx, "wallpaper_limit", strconv.Itoa(wallpaperLimit)); err != nil {
+		if err := s.repos.Settings.Set(ctx, "wallpaper_limit", strconv.Itoa(wallpaperLimit)); err != nil {
 			return err
 		}
 	}
 	if !s.BookmarkletDays(ctx).Locked && bookmarkletDays > 0 {
-		if err := s.repos.Invitations.SetSetting(ctx, "bookmarklet_days", strconv.Itoa(bookmarkletDays)); err != nil {
+		if err := s.repos.Settings.Set(ctx, "bookmarklet_days", strconv.Itoa(bookmarkletDays)); err != nil {
 			return err
 		}
 	}

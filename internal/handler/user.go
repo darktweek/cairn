@@ -20,8 +20,10 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 		"is_active":         user.IsActive,
 		"search_engine":     user.SearchEngine,
 		"search_engine_url": user.SearchEngineURL,
-		"wallpaper_limit":   user.WallpaperLimit,
+		"wallpaper_limit":    user.WallpaperLimit,
+		"upload_size_limit":  user.UploadSizeLimit,
 		"created_at":        user.CreatedAt.Unix(),
+		"locale":            user.Locale,
 		"menu_bang":         h.Settings.MenuBang(r.Context()),
 		"smtp_configured":   h.Settings.SMTP(r.Context()).Configured(),
 	})
@@ -210,6 +212,42 @@ func (h *Handler) RevokeBookmarklet(w http.ResponseWriter, r *http.Request) {
 	// For MVP: LogoutAll — revoking all sessions is acceptable on homelab.
 	user := middleware.UserFromCtx(r.Context())
 	_ = h.Auth.LogoutAll(r.Context(), user.ID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Locale handler
+
+func (h *Handler) UpdateLocale(w http.ResponseWriter, r *http.Request) {
+	user := middleware.UserFromCtx(r.Context())
+	var body struct {
+		Locale string `json:"locale"`
+	}
+	if err := decode(r, &body); err != nil {
+		writeError(w, fmt.Errorf("%w: invalid JSON", service.ErrInvalidInput))
+		return
+	}
+	if err := h.User.UpdateLocale(r.Context(), user.ID, body.Locale); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// DeleteAccount hard-deletes the authenticated user's account after password confirmation.
+func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
+	user := middleware.UserFromCtx(r.Context())
+	var body struct {
+		Password string `json:"password"`
+	}
+	if err := decode(r, &body); err != nil {
+		writeError(w, fmt.Errorf("%w: invalid JSON", service.ErrInvalidInput))
+		return
+	}
+	if err := h.Auth.DeleteAccount(r.Context(), user.ID, body.Password); err != nil {
+		writeError(w, err)
+		return
+	}
+	h.clearSessionCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 

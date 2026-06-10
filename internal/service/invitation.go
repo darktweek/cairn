@@ -38,7 +38,7 @@ func newInvitationService(repos *repository.Repositories, cfg *config.Config, em
 }
 
 func (s *invitationService) IsOpenRegistration(ctx context.Context) (bool, error) {
-	v, err := s.repos.Invitations.GetSetting(ctx, "open_registration")
+	v, err := s.repos.Settings.Get(ctx, "open_registration")
 	if err != nil {
 		return s.cfg.OpenRegistration, nil
 	}
@@ -50,7 +50,7 @@ func (s *invitationService) SetOpenRegistration(ctx context.Context, open bool) 
 	if open {
 		v = "true"
 	}
-	return s.repos.Invitations.SetSetting(ctx, "open_registration", v)
+	return s.repos.Settings.Set(ctx, "open_registration", v)
 }
 
 func (s *invitationService) Create(ctx context.Context, adminID, email string) (*model.Invitation, string, error) {

@@ -27,6 +27,9 @@ func userJSON(u *model.User) map[string]any {
 	if u.WallpaperLimit != nil {
 		out["wallpaper_limit"] = *u.WallpaperLimit
 	}
+	if u.UploadSizeLimit != nil {
+		out["upload_size_limit"] = *u.UploadSizeLimit
+	}
 	return out
 }
 
@@ -127,6 +130,25 @@ func (h *Handler) AdminSetWallpaperLimit(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *Handler) AdminSetUploadSizeLimit(w http.ResponseWriter, r *http.Request) {
+	admin := middleware.UserFromCtx(r.Context())
+	id := chi.URLParam(r, "id")
+
+	var body struct {
+		Limit *int64 `json:"limit"` // bytes; null to reset to global default
+	}
+	if err := decode(r, &body); err != nil {
+		writeError(w, fmt.Errorf("%w: invalid JSON", service.ErrInvalidInput))
+		return
+	}
+
+	if err := h.Admin.SetUploadSizeLimit(r.Context(), admin.ID, id, body.Limit); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) AdminGetAuditLog(w http.ResponseWriter, r *http.Request) {
 	offset, limit := pageParams(r)
 	q := r.URL.Query()
@@ -183,10 +205,11 @@ func (h *Handler) AdminGetUserStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"bookmarks":    st.Bookmarks,
-		"wallpapers":   st.Wallpapers,
-		"sessions":     st.Sessions,
-		"member_since": user.CreatedAt.Unix(),
+		"bookmarks":     st.Bookmarks,
+		"wallpapers":    st.Wallpapers,
+		"sessions":      st.Sessions,
+		"storage_bytes": st.StorageBytes,
+		"member_since":  user.CreatedAt.Unix(),
 	})
 }
 
