@@ -32,6 +32,9 @@ type Config struct {
 	OpenRegistration bool
 	InviteLifetime   int // hours
 
+	// Menu — bang that opens the full-page hub. Empty = admin-editable (default !menu).
+	MenuBang string
+
 	// Proxy
 	TrustedProxy bool
 
@@ -58,6 +61,7 @@ func Load() (*Config, error) {
 		TOTPIssuer:               getEnv("CAIRN_TOTP_ISSUER", "Cairn"),
 		OpenRegistration:         getEnvBool("CAIRN_OPEN_REGISTRATION", true),
 		InviteLifetime:           getEnvInt("CAIRN_INVITE_LIFETIME", 72),
+		MenuBang:                 getEnv("CAIRN_MENU_BANG", ""),
 		TrustedProxy:             getEnvBool("CAIRN_TRUSTED_PROXY", true),
 		SMTPHost:                 getEnv("CAIRN_SMTP_HOST", ""),
 		SMTPPort:                 getEnvInt("CAIRN_SMTP_PORT", 587),

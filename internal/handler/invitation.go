@@ -97,6 +97,33 @@ func (h *Handler) AdminSetRegistrationSettings(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, map[string]any{"open_registration": body.OpenRegistration})
 }
 
+// AdminGetMenuSettings — GET /api/admin/settings/menu
+func (h *Handler) AdminGetMenuSettings(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"menu_bang": h.Settings.MenuBang(r.Context()),
+		"locked":    h.Settings.MenuBangLocked(),
+	})
+}
+
+// AdminSetMenuSettings — PUT /api/admin/settings/menu
+func (h *Handler) AdminSetMenuSettings(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		MenuBang string `json:"menu_bang"`
+	}
+	if err := decode(r, &body); err != nil {
+		writeError(w, fmt.Errorf("%w: invalid JSON", service.ErrInvalidInput))
+		return
+	}
+	if err := h.Settings.SetMenuBang(r.Context(), body.MenuBang); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"menu_bang": h.Settings.MenuBang(r.Context()),
+		"locked":    h.Settings.MenuBangLocked(),
+	})
+}
+
 // AdminCreateInvitation — POST /api/admin/invitations
 func (h *Handler) AdminCreateInvitation(w http.ResponseWriter, r *http.Request) {
 	admin := middleware.UserFromCtx(r.Context())

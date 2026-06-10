@@ -22,6 +22,7 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 		"search_engine_url": user.SearchEngineURL,
 		"wallpaper_limit":   user.WallpaperLimit,
 		"created_at":        user.CreatedAt.Unix(),
+		"menu_bang":         h.Settings.MenuBang(r.Context()),
 	})
 }
 

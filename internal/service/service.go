@@ -13,6 +13,7 @@ type Services struct {
 	Admin      AdminService
 	Email      EmailService
 	Invitation InvitationService
+	Settings   SettingsService
 }
 
 func New(repos *repository.Repositories, cfg *config.Config) *Services {
@@ -26,5 +27,6 @@ func New(repos *repository.Repositories, cfg *config.Config) *Services {
 		Admin:      newAdminService(repos, cfg),
 		Email:      email,
 		Invitation: newInvitationService(repos, cfg, email),
+		Settings:   newSettingsService(repos, cfg),
 	}
 }
