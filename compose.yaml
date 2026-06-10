@@ -12,7 +12,8 @@ services:
       - ALL
     read_only: true
     tmpfs:
-      - /tmp:size=64m,mode=1777
+      # Doit être >= au plus grand upload autorisé (spool multipart temporaire).
+      - /tmp:size=256m,mode=1777
 
     volumes:
       - cairn_data:/data
@@ -23,7 +24,8 @@ services:
       CAIRN_BASE_URL:                   "http://localhost:8080"  # changer en https://... pour la prod
       CAIRN_DB_PATH:                    "/data/db.sqlite"
       CAIRN_MEDIA_PATH:                 "/data/media"
-      CAIRN_MAX_UPLOAD_SIZE:            "52428800"
+      CAIRN_MAX_UPLOAD_SIZE:            "52428800"   # 50 Mo — taille max d'un fichier (override par user possible)
+      CAIRN_STORAGE_QUOTA:              "209715200"  # 200 Mo — stockage total par user (override par user possible)
       CAIRN_TRUSTED_PROXY:              "true"
       # Réglages applicatifs — laissés non définis ici pour rester éditables
       # depuis Admin → Réglages → Système. Décommenter pour verrouiller.

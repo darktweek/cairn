@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><title>Finalisez votre compte Cairn</title></head>
+<body style="font-family:sans-serif;background:#0d0d0f;color:#e8e8e8;margin:0;padding:40px 20px">
+<div style="max-width:480px;margin:0 auto;background:#1a1a1f;border-radius:12px;padding:40px">
+  <h1 style="font-family:Georgia,serif;font-style:italic;color:#fff;margin:0 0 24px">Cairn</h1>
+  <p>Bonjour {{.Username}},</p>
+  <p>Votre demande de compte a bien été reçue. Cliquez sur le lien ci-dessous pour valider votre email et finaliser la configuration (mot de passe et double authentification) :</p>
+  <p style="margin:24px 0">
+    <a href="{{.SetupURL}}" style="background:#fff;color:#0d0d0f;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">
+      Finaliser mon compte
+    </a>
+  </p>
+  <p style="color:#888;font-size:0.85rem">Ce lien expire le {{.ExpiresAt}}.</p>
+  <p style="color:#666;font-size:0.8rem">Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
+</div>
+</body>
+</html>

@@ -70,11 +70,12 @@ type authService struct {
 	repos       *repository.Repositories
 	cfg         *config.Config
 	settings    SettingsService
+	email       EmailService
 	resetTokens sync.Map // tokenHash → resetEntry
 }
 
-func newAuthService(repos *repository.Repositories, cfg *config.Config, settings SettingsService) AuthService {
-	return &authService{repos: repos, cfg: cfg, settings: settings}
+func newAuthService(repos *repository.Repositories, cfg *config.Config, settings SettingsService, email EmailService) AuthService {
+	return &authService{repos: repos, cfg: cfg, settings: settings, email: email}
 }
 
 // Login authenticates a user. totpCode is optional — if TOTP is enabled and empty, returns ErrTOTPRequired.
@@ -550,7 +551,18 @@ func (s *authService) RequestRegistration(ctx context.Context, username, email s
 
 	setupURL := s.cfg.BaseURL + "/setup?token=" + token
 	slog.Info("registration requested", "username", username, "email", email, "setup_url", setupURL)
-	// TODO: send email when SMTP is configured.
+	_ = s.email.SendAccountSetup(ctx, email, username, setupURL, pr.ExpiresAt)
+
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:     ulid.Make().String(),
+		Action: "registration_requested",
+		Metadata: map[string]any{
+			"username": username,
+			"email":    email,
+		},
+		CreatedAt: time.Now(),
+	})
+
 	return nil
 }
 
@@ -611,6 +623,18 @@ func (s *authService) CompleteSetup(ctx context.Context, token, password, totpCo
 	}
 
 	_ = s.repos.PendingRegistrations.MarkCompleted(ctx, pr.ID)
+
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:     ulid.Make().String(),
+		UserID: &user.ID,
+		Action: "registration_completed",
+		Metadata: map[string]any{
+			"username": user.Username,
+			"email":    user.Email,
+		},
+		IP:        ip,
+		CreatedAt: time.Now(),
+	})
 
 	sess, sessionToken, err := s.createSession(ctx, user.ID, ip, userAgent, false)
 	if err != nil {

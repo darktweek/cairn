@@ -22,7 +22,8 @@ type Config struct {
 
 	// Limits
 	DefaultWallpaperLimit    int
-	MaxUploadSize            int64
+	MaxUploadSize            int64  // max size of a single uploaded file (default 50 MB)
+	DefaultStorageQuota      int64  // max total media storage per user (default 200 MB)
 	BookmarkletTokenLifetime int
 
 	// TOTP
@@ -64,7 +65,8 @@ func Load() (*Config, error) {
 		MediaPath:                getEnv("CAIRN_MEDIA_PATH", "/data/media"),
 		SessionSecret:            getEnv("CAIRN_SESSION_SECRET", ""),
 		DefaultWallpaperLimit:    getEnvInt("CAIRN_DEFAULT_WALLPAPER_LIMIT", 10),
-		MaxUploadSize:            getEnvInt64("CAIRN_MAX_UPLOAD_SIZE", 52428800),
+		MaxUploadSize:            getEnvInt64("CAIRN_MAX_UPLOAD_SIZE", 52428800),   // 50 MB
+		DefaultStorageQuota:      getEnvInt64("CAIRN_STORAGE_QUOTA", 209715200),   // 200 MB
 		BookmarkletTokenLifetime: getEnvInt("CAIRN_BOOKMARKLET_TOKEN_LIFETIME", 90),
 		TOTPIssuer:               getEnv("CAIRN_TOTP_ISSUER", "Cairn"),
 		OpenRegistration:         getEnvBool("CAIRN_OPEN_REGISTRATION", true),

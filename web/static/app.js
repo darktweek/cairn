@@ -224,6 +224,8 @@ const TRANSLATIONS = {
     'fx.blur.focus.sub':     'Flou lors de l\'ouverture d\'un panneau',
     'fx.rain':               'Effet pluie',
     'fx.rain.sub':           'Animation de pluie sur la page d\'accueil',
+    'fx.dust':               'Effet poussière',
+    'fx.dust.sub':           'Particules zen qui dérivent lentement sur l\'écran',
 
     // Bookmarklet
     'bml.desc':              'Glissez le lien ci-dessous dans votre barre de favoris pour sauvegarder des pages en un clic.',
@@ -480,6 +482,8 @@ const TRANSLATIONS = {
     'fx.blur.focus.sub':     'Background blur when a panel is open',
     'fx.rain':               'Rain effect',
     'fx.rain.sub':           'Rain animation on the home page',
+    'fx.dust':               'Dust effect',
+    'fx.dust.sub':           'Zen particles drifting slowly across the screen',
 
     // Bookmarklet
     'bml.desc':              'Drag the link below into your bookmarks bar to save pages in one click.',
@@ -624,6 +628,58 @@ function initRain() {
       if (d.y - d.length > canvas.height) {
         d.y = -d.length;
         d.x = Math.random() * canvas.width;
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+  requestAnimationFrame(frame);
+}
+
+/* ─── Dust canvas — slow zen particles drifting across the screen ────────── */
+function initDust() {
+  const canvas = $('dust-canvas');
+  if (!canvas) return;
+  const ctx  = canvas.getContext('2d');
+  let motes  = [];
+
+  function resize() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const count = Math.floor((canvas.width * canvas.height) / 26000);
+    motes = Array.from({ length: count }, () => spawn(true));
+  }
+
+  function spawn(anywhere) {
+    return {
+      x:     anywhere ? Math.random() * canvas.width : -8,
+      y:     Math.random() * canvas.height,
+      r:     0.6 + Math.random() * 1.8,           // tiny soft specks
+      vx:    0.08 + Math.random() * 0.25,          // slow lateral drift
+      vy:    -0.05 + Math.random() * 0.1,          // barely rises/sinks
+      phase: Math.random() * Math.PI * 2,          // twinkle offset
+      tw:    0.4 + Math.random() * 0.8,            // twinkle speed
+      base:  0.05 + Math.random() * 0.16,          // base opacity
+    };
+  }
+
+  function frame(now) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const tSec = now / 1000;
+    for (const m of motes) {
+      // gentle sine sway + slow twinkle
+      const sway    = Math.sin(tSec * 0.3 + m.phase) * 0.15;
+      const opacity = m.base * (0.6 + 0.4 * Math.sin(tSec * m.tw + m.phase));
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(255,250,235,${Math.max(opacity, 0.015)})`;
+      ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+      ctx.fill();
+      m.x += m.vx;
+      m.y += m.vy + sway;
+      if (m.x - m.r > canvas.width || m.y < -10 || m.y > canvas.height + 10) {
+        Object.assign(m, spawn(false));
       }
     }
     requestAnimationFrame(frame);
@@ -1136,6 +1192,7 @@ function buildEffectsTab() {
   sec.appendChild(makeSliderRow(t('fx.blur.panel'), t('fx.blur.panel.sub'), 'blurPanel', 10, 60, 'px', 40));
   sec.appendChild(makeSliderRow(t('fx.blur.focus'), t('fx.blur.focus.sub'), 'blurFocus', 0, 30, 'px', 14));
   sec.appendChild(makeToggleRow(t('fx.rain'), t('fx.rain.sub'), 'rain', true));
+  sec.appendChild(makeToggleRow(t('fx.dust'), t('fx.dust.sub'), 'dust', false));
 
   frag.appendChild(sec);
   return frag;
@@ -1157,6 +1214,8 @@ function applyThemePrefs(p) {
 
   const canvas = $('rain-canvas');
   if (canvas) canvas.style.display = (p.rain === false) ? 'none' : '';
+  const dust = $('dust-canvas');
+  if (dust) dust.style.display = (p.dust === true) ? '' : 'none'; // opt-in
 }
 
 async function loadBookmarks() {
@@ -2056,6 +2115,11 @@ const AUDIT_LABELS = {
   user_deleted:                     'Compte supprimé',
   user_suspended:                   'Compte suspendu',
   register_blocked_duplicate_email: 'Inscription bloquée (email déjà utilisé)',
+  registration_requested:           'Demande d’inscription',
+  registration_completed:           'Inscription finalisée',
+  registration_revoked:             'Demande d’inscription révoquée',
+  invitation_sent:                  'Invitation envoyée',
+  invitation_revoked:               'Invitation révoquée',
   bookmark_import:                  'Import de marque-pages',
   wallpaper_upload:                 'Fond d’écran ajouté',
   wallpaper_delete:                 'Fond d’écran supprimé',
@@ -2161,7 +2225,15 @@ function buildAdminSystem() {
   const fUser = (() => { const g = el('div','form-group'); g.appendChild(el('label','form-label','Username')); const i = el('input','form-input'); g.appendChild(i); return {g,i}; })();
   const fPass = (() => { const g = el('div','form-group'); g.appendChild(el('label','form-label','Password')); const i = el('input','form-input'); i.type='password'; i.placeholder='Leave blank to keep'; g.appendChild(i); return {g,i}; })();
   const fFrom = (() => { const g = el('div','form-group'); g.appendChild(el('label','form-label','From address')); const i = el('input','form-input'); i.type='email'; i.placeholder='cairn@example.com'; g.appendChild(i); return {g,i}; })();
-  const fTls  = (() => { const g = el('div','form-group flex gap-1'); const i = el('input'); i.type='checkbox'; const l = el('label','form-label','TLS (STARTTLS)'); g.append(i,l); return {g,i}; })();
+  const fTls  = (() => {
+    const g = el('div', 'effect-row');
+    g.appendChild(el('div', 'effect-label', 'TLS (STARTTLS)'));
+    const sw = el('label', 'toggle-switch');
+    const i = el('input'); i.type = 'checkbox';
+    sw.append(i, el('span', 'toggle-track'));
+    g.appendChild(sw);
+    return {g,i};
+  })();
   const smtpStatus = el('div', 'text-sm text-dimmer mb-1');
   const smtpMsg = el('div', 'error-msg');
 
@@ -2708,6 +2780,7 @@ async function boot() {
 /* ─── Event wiring ───────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
   initRain();
+  initDust();
 
   // Boot
   boot();

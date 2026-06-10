@@ -268,8 +268,9 @@ func (h *Handler) AdminListInvitations(w http.ResponseWriter, r *http.Request) {
 
 // AdminRevokeInvitation — DELETE /api/admin/invitations/{id}
 func (h *Handler) AdminRevokeInvitation(w http.ResponseWriter, r *http.Request) {
+	admin := middleware.UserFromCtx(r.Context())
 	id := chi.URLParam(r, "id")
-	if err := h.Invitation.Revoke(r.Context(), id); err != nil {
+	if err := h.Invitation.Revoke(r.Context(), admin.ID, id); err != nil {
 		writeError(w, err)
 		return
 	}

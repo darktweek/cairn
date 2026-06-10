@@ -23,7 +23,7 @@ type InvitationService interface {
 	Validate(ctx context.Context, token string) (*model.Invitation, error)
 	Consume(ctx context.Context, token string) (*model.Invitation, error)
 	List(ctx context.Context) ([]*model.Invitation, error)
-	Revoke(ctx context.Context, id string) error
+	Revoke(ctx context.Context, adminID, id string) error
 	Resend(ctx context.Context, id, adminID string) (string, error)
 }
 
@@ -81,6 +81,14 @@ func (s *invitationService) Create(ctx context.Context, adminID, email string) (
 		_ = err
 	}
 
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:        ulid.Make().String(),
+		UserID:    &adminID,
+		Action:    "invitation_sent",
+		Metadata:  map[string]any{"email": email},
+		CreatedAt: time.Now(),
+	})
+
 	return inv, raw, nil
 }
 
@@ -114,8 +122,20 @@ func (s *invitationService) List(ctx context.Context) ([]*model.Invitation, erro
 	return s.repos.Invitations.List(ctx)
 }
 
-func (s *invitationService) Revoke(ctx context.Context, id string) error {
-	return s.repos.Invitations.Delete(ctx, id)
+func (s *invitationService) Revoke(ctx context.Context, adminID, id string) error {
+	if err := s.repos.Invitations.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:        ulid.Make().String(),
+		UserID:    &adminID,
+		Action:    "invitation_revoked",
+		Metadata:  map[string]any{"invitation_id": id},
+		CreatedAt: time.Now(),
+	})
+
+	return nil
 }
 
 func (s *invitationService) Resend(ctx context.Context, id, adminID string) (string, error) {

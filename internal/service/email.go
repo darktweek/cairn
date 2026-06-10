@@ -24,10 +24,14 @@ var welcomeTmpl string
 //go:embed templates/invitation.html
 var invitationTmpl string
 
+//go:embed templates/account_setup.html
+var accountSetupTmpl string
+
 type EmailService interface {
 	SendPasswordReset(ctx context.Context, email, token string) error
 	SendWelcome(ctx context.Context, email, username string) error
 	SendInvitation(ctx context.Context, email, inviteURL string, expiresAt time.Time) error
+	SendAccountSetup(ctx context.Context, email, username, setupURL string, expiresAt time.Time) error
 }
 
 type emailService struct {
@@ -36,6 +40,7 @@ type emailService struct {
 	passwordReset *template.Template
 	welcome       *template.Template
 	invitation    *template.Template
+	accountSetup  *template.Template
 }
 
 func newEmailService(cfg *config.Config, settings SettingsService) EmailService {
@@ -45,6 +50,7 @@ func newEmailService(cfg *config.Config, settings SettingsService) EmailService 
 		passwordReset: template.Must(template.New("password_reset").Parse(passwordResetTmpl)),
 		welcome:       template.Must(template.New("welcome").Parse(welcomeTmpl)),
 		invitation:    template.Must(template.New("invitation").Parse(invitationTmpl)),
+		accountSetup:  template.Must(template.New("account_setup").Parse(accountSetupTmpl)),
 	}
 }
 
@@ -107,6 +113,27 @@ func (s *emailService) SendInvitation(ctx context.Context, email, inviteURL stri
 	}
 	if err := s.send(ctx, email, "Invitation à rejoindre Cairn", body); err != nil {
 		slog.Error("send invitation email", "err", err)
+	}
+	return nil
+}
+
+func (s *emailService) SendAccountSetup(ctx context.Context, email, username, setupURL string, expiresAt time.Time) error {
+	data := struct {
+		Username  string
+		SetupURL  string
+		ExpiresAt string
+	}{
+		Username:  username,
+		SetupURL:  setupURL,
+		ExpiresAt: expiresAt.Format("02/01/2006 à 15:04"),
+	}
+	body, err := renderTemplate(s.accountSetup, data)
+	if err != nil {
+		slog.Error("render account setup email", "err", err)
+		return nil
+	}
+	if err := s.send(ctx, email, "Finalisez votre compte Cairn", body); err != nil {
+		slog.Error("send account setup email", "err", err)
 	}
 	return nil
 }
