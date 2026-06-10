@@ -23,6 +23,14 @@ type UserService interface {
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
 	UpdateSearchEngine(ctx context.Context, userID, engine string, customURL *string) error
 	GetAuditLog(ctx context.Context, userID string, offset, limit int) ([]*model.AuditEntry, int, error)
+	Stats(ctx context.Context, userID string) (*UserStats, error)
+}
+
+// UserStats are the per-account counters shown in the Compte panel and admin.
+type UserStats struct {
+	Bookmarks  int
+	Wallpapers int
+	Sessions   int
 }
 
 type userService struct {
@@ -203,6 +211,22 @@ func (s *userService) uniqueUsername(ctx context.Context, username, name, email 
 		}
 	}
 	return base + "-" + randToken()[:6]
+}
+
+func (s *userService) Stats(ctx context.Context, userID string) (*UserStats, error) {
+	bm, err := s.repos.Bookmarks.CountByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	wp, err := s.repos.Wallpapers.CountByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	sessions, err := s.repos.Sessions.ListByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &UserStats{Bookmarks: bm, Wallpapers: wp, Sessions: len(sessions)}, nil
 }
 
 func (s *userService) GetByID(ctx context.Context, id string) (*model.User, error) {

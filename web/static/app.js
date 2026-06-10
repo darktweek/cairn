@@ -598,9 +598,33 @@ function renderSettingsTab(tabName) {
   }
 }
 
+function statCard(value, label) {
+  const card = el('div', 'stat-card');
+  card.appendChild(el('div', 'stat-value', String(value)));
+  card.appendChild(el('div', 'stat-label', label));
+  return card;
+}
+
 function buildProfileTab() {
   const frag = document.createDocumentFragment();
   const u = S.user;
+
+  // Personal stats
+  const statsSec = el('div', 'settings-section');
+  statsSec.appendChild(el('div', 'settings-section-title', 'Statistiques'));
+  const grid = el('div', 'stat-grid mt-1');
+  grid.textContent = 'Chargement…';
+  GET('/me/stats').then(s => {
+    grid.innerHTML = '';
+    grid.append(
+      statCard(s.bookmarks, 'Marque-pages'),
+      statCard(s.wallpapers, 'Fonds d\'écran'),
+      statCard(s.sessions, 'Sessions'),
+      statCard(new Date(s.member_since * 1000).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }), 'Membre depuis'),
+    );
+  }).catch(() => { grid.textContent = '—'; });
+  statsSec.appendChild(grid);
+  frag.appendChild(statsSec);
 
   const sec = el('div', 'settings-section');
   sec.appendChild(el('div', 'settings-section-title', 'Profil'));
@@ -1050,12 +1074,16 @@ function buildAdminUsers() {
     for (const u of users) {
       const row = el('div', 'admin-user-row');
 
-      const nameEl = el('div');
+      const nameEl = el('div', 'flex-1');
       const name   = el('span', 'user-name', u.username);
       const email  = el('span', 'user-email', ' · ' + u.email);
       if (u.role === 'admin') name.innerHTML += '<span class="badge badge-admin">admin</span>';
       if (!u.is_active)       name.innerHTML += '<span class="badge badge-inactive">suspendu</span>';
-      nameEl.append(name, email);
+      const statLine = el('div', 'user-stats', '…');
+      nameEl.append(name, email, statLine);
+      GET(`/admin/users/${u.id}/stats`).then(s => {
+        statLine.textContent = `${s.bookmarks} marque-pages · ${s.wallpapers} fonds · ${s.sessions} sessions`;
+      }).catch(() => { statLine.textContent = ''; });
 
       const acts = el('div', 'flex gap-1');
 

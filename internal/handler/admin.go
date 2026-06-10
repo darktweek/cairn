@@ -169,6 +169,27 @@ func (h *Handler) AdminGetAuditLog(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// AdminGetUserStats — GET /api/admin/users/{id}/stats
+func (h *Handler) AdminGetUserStats(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	user, err := h.Admin.GetUser(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	st, err := h.User.Stats(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"bookmarks":    st.Bookmarks,
+		"wallpapers":   st.Wallpapers,
+		"sessions":     st.Sessions,
+		"member_since": user.CreatedAt.Unix(),
+	})
+}
+
 func (h *Handler) AdminGetStats(w http.ResponseWriter, r *http.Request) {
 	stats, err := h.Admin.GetStats(r.Context())
 	if err != nil {
