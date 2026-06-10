@@ -988,6 +988,7 @@ function showRegisterForm() {
   hide('reg-success');
   show('reg-inputs');
   show('register-form');
+  $('reg-submit').disabled = true;
   $('reg-username').focus();
 }
 
@@ -2657,6 +2658,15 @@ document.addEventListener('DOMContentLoaded', () => {
   $('login-form').addEventListener('submit', handleLogin);
   $('forgot-form').addEventListener('submit', handleForgot);
   $('register-form').addEventListener('submit', handleRegister);
+  const _regValidate = () => {
+    const username = $('reg-username').value.trim();
+    const email    = $('reg-email').value.trim();
+    const emailOk  = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    $('reg-submit').disabled = username.length < 2 || !emailOk;
+  };
+  $('reg-username').addEventListener('input', _regValidate);
+  $('reg-email').addEventListener('input', _regValidate);
+  _regValidate(); // initial state: button disabled
   $('forgot-link').addEventListener('click', showForgotForm);
   $('forgot-back').addEventListener('click', showLoginForm);
   $('register-link').addEventListener('click', showRegisterForm);
