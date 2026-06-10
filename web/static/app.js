@@ -732,7 +732,11 @@ async function loadWallpaper() {
     v.classList.remove('bg-hidden');
     $('bg-gradient').classList.add('bg-hidden');
     v.addEventListener('loadeddata', () => sampleLuminance(v), { once: true });
+    // Video brightness drifts during playback — re-sample so the theme follows.
+    if (_lumInterval) clearInterval(_lumInterval);
+    _lumInterval = setInterval(() => { if (!v.paused) sampleLuminance(v); }, 10000);
   } else {
+    if (_lumInterval) { clearInterval(_lumInterval); _lumInterval = null; }
     const img = $('bg-image');
     img.src   = url;
     img.classList.remove('bg-hidden');
@@ -741,17 +745,27 @@ async function loadWallpaper() {
   }
 }
 
+let _lumInterval = null;
+
 function sampleLuminance(media) {
-  // For video elements, use a tiny offscreen video snapshot.
+  // Sample a center crop — that's where the clock and search sit, so the
+  // theme follows what the text actually overlaps (cf. go-startpage).
   // Some browsers taint the canvas even for same-origin video — wrap carefully.
   try {
+    const SIZE = 200;
     const c = document.createElement('canvas');
-    c.width = c.height = 32;
+    c.width = c.height = SIZE;
     const ctx = c.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(media, 0, 0, 32, 32);
-    const d = ctx.getImageData(0, 0, 32, 32).data;
+    const sw = media.videoWidth || media.naturalWidth || media.offsetWidth;
+    const sh = media.videoHeight || media.naturalHeight || media.offsetHeight;
+    if (sw > SIZE && sh > SIZE) {
+      ctx.drawImage(media, (sw - SIZE) / 2, (sh - SIZE) / 2, SIZE, SIZE, 0, 0, SIZE, SIZE);
+    } else {
+      ctx.drawImage(media, 0, 0, SIZE, SIZE);
+    }
+    const d = ctx.getImageData(0, 0, SIZE, SIZE).data;
     let sum = 0, n = 0;
-    for (let i = 0; i < d.length; i += 4) {
+    for (let i = 0; i < d.length; i += 16) {
       sum += 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
       n++;
     }
