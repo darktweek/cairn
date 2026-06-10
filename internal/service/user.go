@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -22,15 +24,17 @@ type UserService interface {
 	UpdateProfile(ctx context.Context, userID, username, email string) error
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
 	UpdateSearchEngine(ctx context.Context, userID, engine string, customURL *string) error
+	UpdateLocale(ctx context.Context, userID, locale string) error
 	GetAuditLog(ctx context.Context, userID string, offset, limit int) ([]*model.AuditEntry, int, error)
 	Stats(ctx context.Context, userID string) (*UserStats, error)
 }
 
 // UserStats are the per-account counters shown in the Compte panel and admin.
 type UserStats struct {
-	Bookmarks  int
-	Wallpapers int
-	Sessions   int
+	Bookmarks    int
+	Wallpapers   int
+	Sessions     int
+	StorageBytes int64 // actual disk usage in the user's media directory
 }
 
 type userService struct {
@@ -226,7 +230,20 @@ func (s *userService) Stats(ctx context.Context, userID string) (*UserStats, err
 	if err != nil {
 		return nil, err
 	}
-	return &UserStats{Bookmarks: bm, Wallpapers: wp, Sessions: len(sessions)}, nil
+	storage := dirSize(filepath.Join(s.cfg.MediaPath, userID))
+	return &UserStats{Bookmarks: bm, Wallpapers: wp, Sessions: len(sessions), StorageBytes: storage}, nil
+}
+
+// dirSize returns the total size in bytes of all files under dir (returns 0 if dir doesn't exist).
+func dirSize(dir string) int64 {
+	var total int64
+	_ = filepath.Walk(dir, func(_ string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
 }
 
 func (s *userService) GetByID(ctx context.Context, id string) (*model.User, error) {
@@ -320,6 +337,15 @@ func (s *userService) UpdateSearchEngine(ctx context.Context, userID, engine str
 	user.UpdatedAt = time.Now()
 
 	return s.repos.Users.Update(ctx, user)
+}
+
+var validLocales = map[string]bool{"fr": true, "en": true}
+
+func (s *userService) UpdateLocale(ctx context.Context, userID, locale string) error {
+	if !validLocales[locale] {
+		return fmt.Errorf("%w: unsupported locale", ErrInvalidInput)
+	}
+	return s.repos.Users.UpdateLocale(ctx, userID, locale)
 }
 
 func (s *userService) GetAuditLog(ctx context.Context, userID string, offset, limit int) ([]*model.AuditEntry, int, error) {

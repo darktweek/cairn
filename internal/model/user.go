@@ -9,9 +9,11 @@ type User struct {
 	Password        string `json:"-"` // argon2id hash, never exposed in JSON
 	Role            string // "user" | "admin"
 	IsActive        bool
-	WallpaperLimit  *int    // nil = use global config default
+	WallpaperLimit   *int   // nil = use global config default
+	UploadSizeLimit  *int64 // bytes; nil = use global config default
 	SearchEngine    string  // "duckduckgo" | "google" | "brave" | "bing" | "kagi" | "custom"
 	SearchEngineURL *string // set only when SearchEngine == "custom"
+	Locale          string  // "fr" | "en" — interface language chosen by the user
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	DeletedAt       *time.Time

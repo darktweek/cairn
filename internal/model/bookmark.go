@@ -3,19 +3,19 @@ package model
 import "time"
 
 type Bookmark struct {
-	ID        string
-	UserID    string
-	URL       string
-	Title     string
-	Folder    *string // nil = no folder, "Dev/Go" = materialized path
-	Sort      int
-	Tags      []Tag
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID        string    `json:"id"`
+	UserID    string    `json:"-"`
+	URL       string    `json:"url"`
+	Title     string    `json:"title"`
+	Folder    *string   `json:"folder"`
+	Sort      int       `json:"sort"`
+	Tags      []Tag     `json:"tags"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type Tag struct {
-	ID     string
-	UserID string
-	Name   string
+	ID     string `json:"id"`
+	UserID string `json:"-"`
+	Name   string `json:"name"`
 }
