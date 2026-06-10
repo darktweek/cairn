@@ -12,6 +12,7 @@ const S = {
   wallpapers:  [],
   sessions:    [],
   editingBmId: null,
+  menuBang:    '!menu',
 };
 
 /* ─── API client ─────────────────────────────────────────────────────────── */
@@ -187,6 +188,13 @@ function handleSearch(e) {
   const q = $('search-input').value.trim();
   if (!q) return;
 
+  // Menu bang (configurable) → open the full-page hub.
+  if (q.toLowerCase() === S.menuBang.toLowerCase()) {
+    openHub();
+    $('search-input').value = '';
+    return;
+  }
+
   const m = q.match(/^!(\w+)\s*(.*)/s);
   if (m) {
     const bang = m[1].toLowerCase();
@@ -218,6 +226,19 @@ function handleSearch(e) {
 }
 
 function open(url) { window.location.href = url; }
+
+/* ─── Hub (menu bang) ────────────────────────────────────────────────────── */
+function openHub() {
+  toggle('tile-admin', S.user && S.user.role === 'admin');
+  const g = $('hub-greeting');
+  if (g && S.user) g.textContent = S.user.username;
+  show('hub-overlay');
+}
+function closeHub() {
+  const el = $('hub-overlay');
+  el.classList.add('closing');
+  setTimeout(() => { el.classList.remove('closing'); hide('hub-overlay'); }, 220);
+}
 
 /* ─── Login ──────────────────────────────────────────────────────────────── */
 async function handleLogin(e) {
@@ -963,6 +984,7 @@ function renderAdminTab(tabName) {
     case 'stats':       body.appendChild(buildAdminStats());       break;
     case 'users':       body.appendChild(buildAdminUsers());       break;
     case 'invitations': body.appendChild(buildAdminInvitations()); break;
+    case 'settings':    body.appendChild(buildAdminSettings());    break;
     case 'audit':       body.appendChild(buildAdminAudit());       break;
   }
 }
@@ -1087,6 +1109,47 @@ function buildAdminAudit() {
   }).catch(e => { list.textContent = 'Erreur : ' + e.message; });
 
   frag.appendChild(list);
+  return frag;
+}
+
+function buildAdminSettings() {
+  const frag = document.createDocumentFragment();
+
+  const title = el('div', 'settings-section-title', 'Menu');
+  const desc = el('p', 'text-sm text-dim mb-1',
+    'Le bang qui ouvre le menu plein écran. Tape-le dans la barre de recherche.');
+
+  const row = el('div', 'flex gap-1 mb-1');
+  const input = el('input', 'form-input flex-1');
+  input.type = 'text'; input.placeholder = '!menu';
+  const saveBtn = el('button', 'btn btn-primary', 'Enregistrer');
+  const msg = el('div', 'error-msg');
+  row.append(input, saveBtn);
+
+  GET('/admin/settings/menu').then(s => {
+    input.value = s.menu_bang;
+    if (s.locked) {
+      input.disabled = true;
+      saveBtn.disabled = true;
+      msg.className = 'text-sm text-dimmer';
+      msg.textContent = 'Configuré via le compose (CAIRN_MENU_BANG) — non modifiable ici.';
+    }
+  }).catch(e => { msg.textContent = e.message; });
+
+  saveBtn.onclick = async () => {
+    msg.className = 'error-msg'; msg.textContent = '';
+    let v = input.value.trim();
+    if (v && v[0] !== '!') v = '!' + v;
+    try {
+      const r = await PUT('/admin/settings/menu', { menu_bang: v });
+      S.menuBang = r.menu_bang;
+      input.value = r.menu_bang;
+      msg.className = 'text-sm text-dim';
+      msg.textContent = 'Enregistré.';
+    } catch (e) { msg.className = 'error-msg'; msg.textContent = e.message; }
+  };
+
+  frag.append(title, desc, row, msg);
   return frag;
 }
 
@@ -1229,11 +1292,13 @@ async function boot() {
     S.wallpapers = (await GET('/wallpapers')) || [];
   } catch { S.wallpapers = []; }
 
+  // Configurable menu bang + placeholder hint
+  if (S.user.menu_bang) S.menuBang = S.user.menu_bang;
+  const si = $('search-input');
+  if (si) si.placeholder = `Rechercher…  ${S.menuBang} pour le menu`;
+
   loadWallpaper();
   startClock();
-
-  // Show admin button if admin
-  toggle('btn-admin', S.user.role === 'admin');
 
   hide('view-login');
   show('view-home');
@@ -1256,12 +1321,14 @@ document.addEventListener('DOMContentLoaded', () => {
   $('register-link').addEventListener('click', showRegisterForm);
   $('reg-back').addEventListener('click', showLoginForm);
 
-  // Home nav
+  // Home + hub
   $('search-form').addEventListener('submit', handleSearch);
-  $('btn-logout').addEventListener('click', logout);
-  $('btn-bookmarks').addEventListener('click', openBookmarks);
-  $('btn-settings').addEventListener('click', openSettings);
-  $('btn-admin').addEventListener('click', openAdmin);
+  $('hub-close').addEventListener('click', closeHub);
+  $('hub-overlay').addEventListener('mousedown', e => { if (e.target === $('hub-overlay')) closeHub(); });
+  $('tile-bookmarks').addEventListener('click', () => { closeHub(); openBookmarks(); });
+  $('tile-settings').addEventListener('click', () => { closeHub(); openSettings(); });
+  $('tile-admin').addEventListener('click', () => { closeHub(); openAdmin(); });
+  $('tile-logout').addEventListener('click', () => { closeHub(); logout(); });
 
   // Bookmark overlay
   $('bm-close').addEventListener('click', closeBookmarks);
@@ -1314,8 +1381,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const el = $(id);
       if (!el.classList.contains('hidden')) {
         hide(id);
-        break;
+        return;
       }
     }
+    if (!$('hub-overlay').classList.contains('hidden')) closeHub();
   });
 });

@@ -90,13 +90,6 @@
 
   <!-- ── Home ── -->
   <div id="view-home" class="view hidden">
-    <nav class="home-nav">
-      <button class="nav-btn" id="btn-bookmarks">Marque-pages</button>
-      <button class="nav-btn" id="btn-settings">Compte</button>
-      <button class="nav-btn hidden" id="btn-admin">Admin</button>
-      <button class="nav-btn" id="btn-logout">Quitter</button>
-    </nav>
-
     <div class="home-center">
       <div id="clock" class="clock">00:00</div>
       <div id="date-line" class="date-line"></div>
@@ -113,6 +106,46 @@
             </svg>
           </button>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Hub (menu bang) ── -->
+  <div id="hub-overlay" class="hub-overlay hidden">
+    <div class="hub-inner">
+      <div class="hub-head">
+        <span class="hub-greeting" id="hub-greeting">Menu</span>
+        <button class="hub-close" id="hub-close" aria-label="Fermer">✕</button>
+      </div>
+      <div class="hub-grid">
+        <button class="hub-tile" id="tile-bookmarks">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+          </svg>
+          <span class="hub-tile-label">Marque-pages</span>
+          <span class="hub-tile-sub">Organiser & rechercher</span>
+        </button>
+        <button class="hub-tile" id="tile-settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>
+          </svg>
+          <span class="hub-tile-label">Compte</span>
+          <span class="hub-tile-sub">Profil, sécurité, fonds</span>
+        </button>
+        <button class="hub-tile hidden" id="tile-admin">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2l8 4v6c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6z"/>
+          </svg>
+          <span class="hub-tile-label">Administration</span>
+          <span class="hub-tile-sub">Utilisateurs, invitations</span>
+        </button>
+        <button class="hub-tile hub-tile-danger" id="tile-logout">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>
+          </svg>
+          <span class="hub-tile-label">Déconnexion</span>
+          <span class="hub-tile-sub">Fermer la session</span>
+        </button>
       </div>
     </div>
   </div>
@@ -169,6 +202,7 @@
         <button class="tab active" data-tab="stats">Statistiques</button>
         <button class="tab" data-tab="users">Utilisateurs</button>
         <button class="tab" data-tab="invitations">Invitations</button>
+        <button class="tab" data-tab="settings">Réglages</button>
         <button class="tab" data-tab="audit">Journal</button>
       </div>
       <div class="panel-body" id="admin-body"></div>

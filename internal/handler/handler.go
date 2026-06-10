@@ -17,6 +17,7 @@ type Handler struct {
 	Admin        service.AdminService
 	Email        service.EmailService
 	Invitation   service.InvitationService
+	Settings     service.SettingsService
 	secureCookie bool
 }
 
@@ -29,6 +30,7 @@ func New(svcs *service.Services, production bool) *Handler {
 		Admin:        svcs.Admin,
 		Email:        svcs.Email,
 		Invitation:   svcs.Invitation,
+		Settings:     svcs.Settings,
 		secureCookie: production,
 	}
 }
