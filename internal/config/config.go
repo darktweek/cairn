@@ -8,19 +8,19 @@ import (
 )
 
 type Config struct {
-	// Serveur
+	// Server
 	Addr    string
 	Env     string
 	BaseURL string
 
-	// Base de données
+	// Database
 	DBPath    string
 	MediaPath string
 
-	// Sécurité
+	// Security
 	SessionSecret string
 
-	// Limites
+	// Limits
 	DefaultWallpaperLimit    int
 	MaxUploadSize            int64
 	BookmarkletTokenLifetime int

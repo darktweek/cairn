@@ -12,6 +12,6 @@ type Invitation struct {
 	CreatedAt time.Time
 }
 
-func (i *Invitation) IsExpired() bool  { return time.Now().After(i.ExpiresAt) }
-func (i *Invitation) IsUsed() bool     { return i.UsedAt != nil }
-func (i *Invitation) IsPending() bool  { return !i.IsUsed() && !i.IsExpired() }
+func (i *Invitation) IsExpired() bool { return time.Now().After(i.ExpiresAt) }
+func (i *Invitation) IsUsed() bool    { return i.UsedAt != nil }
+func (i *Invitation) IsPending() bool { return !i.IsUsed() && !i.IsExpired() }

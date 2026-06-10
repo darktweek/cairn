@@ -64,13 +64,13 @@ func (h *Handler) SSOCallback(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) AdminGetSSOSettings(w http.ResponseWriter, r *http.Request) {
 	cfg := h.OIDC.Config(r.Context())
 	writeJSON(w, http.StatusOK, map[string]any{
-		"issuer":           cfg.Issuer,
-		"client_id":        cfg.ClientID,
-		"provider_name":    cfg.ProviderName,
-		"scopes":           cfg.Scopes,
-		"has_secret":       cfg.ClientSecret != "",
-		"locked":           cfg.Locked,
-		"enabled":          cfg.Enabled(),
+		"issuer":        cfg.Issuer,
+		"client_id":     cfg.ClientID,
+		"provider_name": cfg.ProviderName,
+		"scopes":        cfg.Scopes,
+		"has_secret":    cfg.ClientSecret != "",
+		"locked":        cfg.Locked,
+		"enabled":       cfg.Enabled(),
 	})
 }
 
