@@ -18,14 +18,14 @@ type Services struct {
 }
 
 func New(repos *repository.Repositories, cfg *config.Config) *Services {
-	auth     := newAuthService(repos, cfg)
-	email    := newEmailService(cfg)
 	settings := newSettingsService(repos, cfg)
+	auth     := newAuthService(repos, cfg, settings)
+	email    := newEmailService(cfg)
 	return &Services{
 		Auth:       auth,
 		User:       newUserService(repos, cfg),
 		Bookmark:   newBookmarkService(repos, cfg, auth),
-		Wallpaper:  newWallpaperService(repos, cfg),
+		Wallpaper:  newWallpaperService(repos, cfg, settings),
 		Admin:      newAdminService(repos, cfg),
 		Email:      email,
 		Invitation: newInvitationService(repos, cfg, email),

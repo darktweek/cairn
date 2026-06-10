@@ -36,12 +36,13 @@ type WallpaperService interface {
 }
 
 type wallpaperService struct {
-	repos *repository.Repositories
-	cfg   *config.Config
+	repos    *repository.Repositories
+	cfg      *config.Config
+	settings SettingsService
 }
 
-func newWallpaperService(repos *repository.Repositories, cfg *config.Config) WallpaperService {
-	return &wallpaperService{repos: repos, cfg: cfg}
+func newWallpaperService(repos *repository.Repositories, cfg *config.Config, settings SettingsService) WallpaperService {
+	return &wallpaperService{repos: repos, cfg: cfg, settings: settings}
 }
 
 func (s *wallpaperService) Upload(ctx context.Context, userID, originalFilename string, data []byte) (*model.Wallpaper, error) {
@@ -56,7 +57,7 @@ func (s *wallpaperService) Upload(ctx context.Context, userID, originalFilename 
 		return nil, err
 	}
 
-	limit := s.cfg.DefaultWallpaperLimit
+	limit := s.settings.WallpaperLimit(ctx).Value
 	user, err := s.repos.Users.GetByID(ctx, userID)
 	if err == nil && user.WallpaperLimit != nil {
 		limit = *user.WallpaperLimit

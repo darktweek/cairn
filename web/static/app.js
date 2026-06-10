@@ -1206,7 +1206,81 @@ function buildAdminSettings() {
 
   frag.append(title, desc, row, msg);
   frag.append(buildAdminSSO());
+  frag.append(buildAdminSystem());
   return frag;
+}
+
+function buildAdminSystem() {
+  const wrap = el('div');
+  wrap.style.marginTop = '2rem';
+  wrap.appendChild(el('div', 'settings-section-title', 'Système'));
+  wrap.appendChild(el('p', 'text-sm text-dim mb-1',
+    'Réglages applicatifs. Ceux définis dans le compose sont verrouillés (grisés). Les valeurs confidentielles ne sont jamais affichées.'));
+
+  // Editable runtime settings
+  const mkNum = (labelTxt, ph) => {
+    const g = el('div', 'form-group'); g.appendChild(el('label', 'form-label', labelTxt));
+    const i = el('input', 'form-input'); i.type = 'number'; i.placeholder = ph || ''; g.appendChild(i);
+    return { g, i };
+  };
+  const fTotp = (() => {
+    const g = el('div', 'form-group'); g.appendChild(el('label', 'form-label', 'Nom émetteur TOTP'));
+    const i = el('input', 'form-input'); i.type = 'text'; g.appendChild(i);
+    return { g, i };
+  })();
+  const fWp = mkNum('Limite de fonds d\'écran par défaut', '10');
+  const fBm = mkNum('Durée du token bookmarklet (jours)', '90');
+  const saveBtn = el('button', 'btn btn-primary', 'Enregistrer');
+  const msg = el('div', 'error-msg');
+
+  // Read-only system info
+  const roWrap = el('div'); roWrap.style.marginTop = '1.2rem';
+
+  const lockField = (f, locked) => { if (locked) { f.i.disabled = true; f.i.title = 'Défini dans le compose'; } };
+
+  GET('/admin/settings/system').then(s => {
+    fTotp.i.value = s.editable.totp_issuer.value;     lockField(fTotp, s.editable.totp_issuer.locked);
+    fWp.i.value   = s.editable.wallpaper_limit.value;  lockField(fWp,   s.editable.wallpaper_limit.locked);
+    fBm.i.value   = s.editable.bookmarklet_days.value; lockField(fBm,   s.editable.bookmarklet_days.locked);
+
+    roWrap.innerHTML = '';
+    roWrap.appendChild(el('div', 'settings-section-title', 'Infrastructure (compose · lecture seule)'));
+    const rows = [
+      ['Adresse d\'écoute', s.system.addr],
+      ['Environnement', s.system.env],
+      ['URL publique', s.system.base_url],
+      ['Base de données', s.system.db_path],
+      ['Répertoire médias', s.system.media_path],
+      ['Taille max upload', fmtBytes(s.system.max_upload_size)],
+      ['Proxy de confiance', s.system.trusted_proxy ? 'oui' : 'non'],
+      ['Secret de session', s.system.session_secret ? '•••••••• défini' : '⚠ non défini'],
+      ['SMTP serveur', `${s.smtp.host}:${s.smtp.port}`],
+      ['SMTP utilisateur', s.smtp.user],
+      ['SMTP expéditeur', s.smtp.from],
+      ['SMTP TLS', s.smtp.tls ? 'oui' : 'non'],
+      ['SMTP mot de passe', s.smtp.has_password ? '•••••••• défini' : '⚠ non défini'],
+    ];
+    for (const [k, v] of rows) {
+      const r = el('div', 'sysinfo-row');
+      r.append(el('span', 'sysinfo-key', k), el('span', 'sysinfo-val', String(v)));
+      roWrap.appendChild(r);
+    }
+  }).catch(e => { msg.textContent = e.message; });
+
+  saveBtn.onclick = async () => {
+    msg.className = 'error-msg'; msg.textContent = '';
+    try {
+      await PUT('/admin/settings/system', {
+        totp_issuer:      fTotp.i.value.trim(),
+        wallpaper_limit:  parseInt(fWp.i.value, 10) || 0,
+        bookmarklet_days: parseInt(fBm.i.value, 10) || 0,
+      });
+      msg.className = 'text-sm text-dim'; msg.textContent = 'Enregistré.';
+    } catch (e) { msg.className = 'error-msg'; msg.textContent = e.message; }
+  };
+
+  wrap.append(fTotp.g, fWp.g, fBm.g, saveBtn, msg, roWrap);
+  return wrap;
 }
 
 function buildAdminSSO() {
