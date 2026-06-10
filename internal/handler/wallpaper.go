@@ -44,12 +44,6 @@ func (h *Handler) UploadWallpaper(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Per-user upload size limit: use user's custom limit if set.
-	if user.UploadSizeLimit != nil && int64(len(data)) > *user.UploadSizeLimit {
-		writeError(w, fmt.Errorf("%w: file exceeds your upload size limit of %d bytes", service.ErrInvalidInput, *user.UploadSizeLimit))
-		return
-	}
-
 	wp, err := h.Wallpaper.Upload(r.Context(), user.ID, header.Filename, data)
 	if err != nil {
 		writeError(w, err)

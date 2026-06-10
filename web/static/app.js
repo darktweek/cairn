@@ -180,12 +180,16 @@ const TRANSLATIONS = {
     'admin.upload.limit.save': 'Enregistrer la limite',
     'admin.upload.limit.reset': 'Remettre à la limite globale',
     'admin.upload.global':     'limite globale',
+    'admin.quota':             'Quota stockage',
+    'admin.quota.save':        'Enregistrer le quota',
+    'admin.quota.reset':       'Remettre au quota global',
     'admin.sys.addr':        'Adresse d\'écoute',
     'admin.sys.env':         'Environnement',
     'admin.sys.base_url':    'URL publique',
     'admin.sys.db_path':     'Base de données',
     'admin.sys.media_path':  'Répertoire médias',
     'admin.sys.max_upload':  'Taille max upload',
+    'admin.sys.storage_quota': 'Quota stockage défaut',
     'admin.sys.trusted_proxy': 'Proxy de confiance',
     'admin.sys.session_secret': 'Secret de session',
     'admin.sys.version':     'Version',
@@ -426,12 +430,16 @@ const TRANSLATIONS = {
     'admin.upload.limit.save': 'Save limit',
     'admin.upload.limit.reset': 'Reset to global default',
     'admin.upload.global':     'global limit',
+    'admin.quota':             'Storage quota',
+    'admin.quota.save':        'Save quota',
+    'admin.quota.reset':       'Reset to global default',
     'admin.sys.addr':        'Listen address',
     'admin.sys.env':         'Environment',
     'admin.sys.base_url':    'Public URL',
     'admin.sys.db_path':     'Database',
     'admin.sys.media_path':  'Media directory',
     'admin.sys.max_upload':  'Max upload size',
+    'admin.sys.storage_quota': 'Default storage quota',
     'admin.sys.trusted_proxy': 'Trusted proxy',
     'admin.sys.session_secret': 'Session secret',
     'admin.sys.version':     'Version',
@@ -1933,11 +1941,10 @@ function buildAdminUsers() {
 
       GET(`/admin/users/${u.id}/stats`).then(s => {
         statLine.textContent = `${s.bookmarks} ${t('stat.bookmarks').toLowerCase()} · ${s.wallpapers} ${t('stat.wallpapers').toLowerCase()} · ${s.sessions} ${t('stat.sessions').toLowerCase()}`;
-        // Storage: show used / limit (or used / global default)
-        const used     = fmtBytes(s.storage_bytes);
-        const limitVal = u.upload_size_limit != null ? fmtBytes(u.upload_size_limit) : `${t('admin.upload.global')}`;
-        storageLine.textContent = `💾 ${used} / ${limitVal}`;
-        if (u.upload_size_limit != null && s.storage_bytes > u.upload_size_limit) {
+        const used      = fmtBytes(s.storage_bytes);
+        const quotaVal  = u.storage_quota != null ? fmtBytes(u.storage_quota) : t('admin.upload.global');
+        storageLine.textContent = `💾 ${used} / ${quotaVal}`;
+        if (u.storage_quota != null && s.storage_bytes > u.storage_quota) {
           storageLine.style.color = 'var(--danger)';
         }
       }).catch(() => { statLine.textContent = ''; });
@@ -1965,10 +1972,10 @@ function buildAdminUsers() {
           } catch (e) { alert(e.message); }
         };
 
-        // Inline upload limit: input (MB) + save button
+        // Inline upload size limit (single file, MB)
         const limitWrap = el('div', 'flex gap-1 items-center');
         const limitInput = el('input', 'form-input form-input-sm');
-        limitInput.type = 'number'; limitInput.min = '1'; limitInput.style.width = '6rem';
+        limitInput.type = 'number'; limitInput.min = '1'; limitInput.style.width = '5.5rem';
         limitInput.placeholder = t('admin.upload.global');
         limitInput.title = t('admin.upload.limit') + ' (MB)';
         if (u.upload_size_limit != null) limitInput.value = Math.round(u.upload_size_limit / (1024 * 1024));
@@ -1989,7 +1996,31 @@ function buildAdminUsers() {
         };
         limitWrap.append(limitInput, limitSaveBtn, limitResetBtn);
 
-        acts.append(suspBtn, limitWrap, delBtn);
+        // Inline storage quota (total, MB)
+        const quotaWrap = el('div', 'flex gap-1 items-center');
+        const quotaInput = el('input', 'form-input form-input-sm');
+        quotaInput.type = 'number'; quotaInput.min = '1'; quotaInput.style.width = '5.5rem';
+        quotaInput.placeholder = t('admin.upload.global');
+        quotaInput.title = t('admin.quota') + ' (MB)';
+        if (u.storage_quota != null) quotaInput.value = Math.round(u.storage_quota / (1024 * 1024));
+        const quotaSaveBtn = el('button', 'btn btn-small btn-secondary', '💾');
+        quotaSaveBtn.title = t('admin.quota.save');
+        const quotaResetBtn = el('button', 'btn btn-small btn-secondary', '↺');
+        quotaResetBtn.title = t('admin.quota.reset');
+        quotaSaveBtn.onclick = async () => {
+          const mb = quotaInput.value.trim();
+          if (!mb || isNaN(parseInt(mb, 10)) || parseInt(mb, 10) <= 0) return;
+          const quota = parseInt(mb, 10) * 1024 * 1024;
+          try { await PUT(`/admin/users/${u.id}/storage-quota`, { quota }); renderAdminTab('users'); }
+          catch (e) { alert(e.message); }
+        };
+        quotaResetBtn.onclick = async () => {
+          try { await PUT(`/admin/users/${u.id}/storage-quota`, { quota: null }); renderAdminTab('users'); }
+          catch (e) { alert(e.message); }
+        };
+        quotaWrap.append(quotaInput, quotaSaveBtn, quotaResetBtn);
+
+        acts.append(suspBtn, limitWrap, quotaWrap, delBtn);
       } else {
         acts.appendChild(el('span', 'text-sm text-dimmer', t('admin.user.you')));
       }
@@ -2160,6 +2191,7 @@ function buildAdminSystem() {
       [t('admin.sys.db_path'),        s.system.db_path],
       [t('admin.sys.media_path'),     s.system.media_path],
       [t('admin.sys.max_upload'),     fmtBytes(s.system.max_upload_size)],
+      [t('admin.sys.storage_quota'),  fmtBytes(s.system.default_storage_quota)],
       [t('admin.sys.trusted_proxy'),  s.system.trusted_proxy ? t('admin.sys.yes') : t('admin.sys.no')],
       [t('admin.sys.session_secret'), s.system.session_secret ? `•••••••• ${t('admin.sys.set')}` : t('admin.sys.not_set')],
     ];
@@ -2277,7 +2309,8 @@ function buildAdminSSO() {
 function buildAdminInvitations() {
   const frag = document.createDocumentFragment();
 
-  // Toggle open registration
+  // ── Registration toggle ──────────────────────────────────────────────────
+  const regSection = el('div', 'settings-section');
   const toggleErr = el('div', 'error-msg');
 
   const regRow = el('div', 'effect-row');
@@ -2306,17 +2339,18 @@ function buildAdminInvitations() {
       const res = await PUT('/admin/settings/registration', { open_registration: regInp.checked });
       regInp.checked  = res.open_registration;
     } catch (e) {
-      regInp.checked = !regInp.checked; // revert
+      regInp.checked = !regInp.checked;
       toggleErr.textContent = e.message || 'Error';
     } finally {
       regInp.disabled = false;
     }
   };
 
-  frag.appendChild(regRow);
-  frag.appendChild(toggleErr);
+  regSection.append(regRow, toggleErr);
+  frag.appendChild(regSection);
 
-  // Invite form
+  // ── Invite form ──────────────────────────────────────────────────────────
+  const inviteSection = el('div', 'settings-section');
   const form = el('div', 'flex gap-1 mb-1');
   const emailInput = el('input', 'form-input flex-1');
   emailInput.type = 'email'; emailInput.placeholder = 'user@example.com';
@@ -2378,7 +2412,8 @@ function buildAdminInvitations() {
     }
   }).catch(e => { list.textContent = t('error') + ': ' + e.message; });
 
-  frag.append(form, inviteErr, list);
+  inviteSection.append(form, inviteErr, list);
+  frag.appendChild(inviteSection);
   return frag;
 }
 

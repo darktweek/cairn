@@ -21,6 +21,7 @@ type AdminService interface {
 	DeleteUser(ctx context.Context, adminID, userID string) error
 	SetWallpaperLimit(ctx context.Context, adminID, userID string, limit *int) error
 	SetUploadSizeLimit(ctx context.Context, adminID, userID string, limit *int64) error
+	SetStorageQuota(ctx context.Context, adminID, userID string, quota *int64) error
 	GetAuditLog(ctx context.Context, offset, limit int, filter repository.AuditFilter) ([]*model.AuditEntry, int, error)
 	GetStats(ctx context.Context) (*model.AdminStats, error)
 }
@@ -143,6 +144,18 @@ func (s *adminService) SetUploadSizeLimit(ctx context.Context, adminID, userID s
 	}
 
 	user.UploadSizeLimit = limit
+	user.UpdatedAt = time.Now()
+
+	return s.repos.Users.Update(ctx, user)
+}
+
+func (s *adminService) SetStorageQuota(ctx context.Context, adminID, userID string, quota *int64) error {
+	user, err := s.repos.Users.GetByID(ctx, userID)
+	if err != nil {
+		return ErrNotFound
+	}
+
+	user.StorageQuota = quota
 	user.UpdatedAt = time.Now()
 
 	return s.repos.Users.Update(ctx, user)

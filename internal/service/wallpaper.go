@@ -46,25 +46,39 @@ func newWallpaperService(repos *repository.Repositories, cfg *config.Config, set
 }
 
 func (s *wallpaperService) Upload(ctx context.Context, userID, originalFilename string, data []byte) (*model.Wallpaper, error) {
-	// Check size limit.
-	if int64(len(data)) > s.cfg.MaxUploadSize {
+	// Fetch user once to apply per-user limits.
+	user, _ := s.repos.Users.GetByID(ctx, userID)
+
+	// Check single-file upload size limit (global default, overridable per user).
+	uploadLimit := s.cfg.MaxUploadSize
+	if user != nil && user.UploadSizeLimit != nil {
+		uploadLimit = *user.UploadSizeLimit
+	}
+	if int64(len(data)) > uploadLimit {
 		return nil, fmt.Errorf("%w: file too large", ErrInvalidInput)
 	}
 
-	// Check user wallpaper quota.
+	// Check user wallpaper count quota.
 	count, err := s.repos.Wallpapers.CountByUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-
-	limit := s.settings.WallpaperLimit(ctx).Value
-	user, err := s.repos.Users.GetByID(ctx, userID)
-	if err == nil && user.WallpaperLimit != nil {
-		limit = *user.WallpaperLimit
+	wallpaperLimit := s.settings.WallpaperLimit(ctx).Value
+	if user != nil && user.WallpaperLimit != nil {
+		wallpaperLimit = *user.WallpaperLimit
+	}
+	if count >= wallpaperLimit {
+		return nil, ErrWallpaperLimit
 	}
 
-	if count >= limit {
-		return nil, ErrWallpaperLimit
+	// Check total storage quota.
+	quota := s.cfg.DefaultStorageQuota
+	if user != nil && user.StorageQuota != nil {
+		quota = *user.StorageQuota
+	}
+	userDir := filepath.Join(s.cfg.MediaPath, userID)
+	if dirSize(userDir)+int64(len(data)) > quota {
+		return nil, fmt.Errorf("%w: storage quota exceeded", ErrInvalidInput)
 	}
 
 	// Validate extension.
@@ -84,7 +98,6 @@ func (s *wallpaperService) Upload(ctx context.Context, userID, originalFilename 
 	safeFilename := id + ext
 
 	// Ensure user media directory exists.
-	userDir := filepath.Join(s.cfg.MediaPath, userID)
 	if err := os.MkdirAll(userDir, 0o750); err != nil {
 		return nil, fmt.Errorf("create media dir: %w", err)
 	}

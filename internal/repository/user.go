@@ -40,10 +40,10 @@ func (r *sqliteUserRepo) Create(ctx context.Context, u *model.User) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO users
 			(id, username, email, password, role, is_active, wallpaper_limit, upload_size_limit,
-			 search_engine, search_engine_url, locale, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 storage_quota, search_engine, search_engine_url, locale, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.ID, u.Username, u.Email, u.Password, u.Role, boolToInt(u.IsActive),
-		u.WallpaperLimit, u.UploadSizeLimit, u.SearchEngine, u.SearchEngineURL, locale,
+		u.WallpaperLimit, u.UploadSizeLimit, u.StorageQuota, u.SearchEngine, u.SearchEngineURL, locale,
 		u.CreatedAt.Unix(), u.UpdatedAt.Unix(),
 	)
 	if err != nil {
@@ -55,7 +55,7 @@ func (r *sqliteUserRepo) Create(ctx context.Context, u *model.User) error {
 func (r *sqliteUserRepo) GetByID(ctx context.Context, id string) (*model.User, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, username, email, password, role, is_active, wallpaper_limit, upload_size_limit,
-		       search_engine, search_engine_url, locale, created_at, updated_at, deleted_at
+		       storage_quota, search_engine, search_engine_url, locale, created_at, updated_at, deleted_at
 		FROM users WHERE id = ? AND deleted_at IS NULL`, id)
 	return scanUser(row)
 }
@@ -63,7 +63,7 @@ func (r *sqliteUserRepo) GetByID(ctx context.Context, id string) (*model.User, e
 func (r *sqliteUserRepo) GetByEmail(ctx context.Context, email string) (*model.User, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, username, email, password, role, is_active, wallpaper_limit, upload_size_limit,
-		       search_engine, search_engine_url, locale, created_at, updated_at, deleted_at
+		       storage_quota, search_engine, search_engine_url, locale, created_at, updated_at, deleted_at
 		FROM users WHERE email = ? AND deleted_at IS NULL`, email)
 	return scanUser(row)
 }
@@ -71,7 +71,7 @@ func (r *sqliteUserRepo) GetByEmail(ctx context.Context, email string) (*model.U
 func (r *sqliteUserRepo) GetByUsername(ctx context.Context, username string) (*model.User, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, username, email, password, role, is_active, wallpaper_limit, upload_size_limit,
-		       search_engine, search_engine_url, locale, created_at, updated_at, deleted_at
+		       storage_quota, search_engine, search_engine_url, locale, created_at, updated_at, deleted_at
 		FROM users WHERE username = ? AND deleted_at IS NULL`, username)
 	return scanUser(row)
 }
@@ -80,10 +80,11 @@ func (r *sqliteUserRepo) Update(ctx context.Context, u *model.User) error {
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE users SET
 			username = ?, email = ?, password = ?, role = ?, is_active = ?,
-			wallpaper_limit = ?, upload_size_limit = ?, search_engine = ?, search_engine_url = ?, updated_at = ?
+			wallpaper_limit = ?, upload_size_limit = ?, storage_quota = ?,
+			search_engine = ?, search_engine_url = ?, updated_at = ?
 		WHERE id = ? AND deleted_at IS NULL`,
 		u.Username, u.Email, u.Password, u.Role, boolToInt(u.IsActive),
-		u.WallpaperLimit, u.UploadSizeLimit, u.SearchEngine, u.SearchEngineURL, u.UpdatedAt.Unix(), u.ID,
+		u.WallpaperLimit, u.UploadSizeLimit, u.StorageQuota, u.SearchEngine, u.SearchEngineURL, u.UpdatedAt.Unix(), u.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("user update: %w", err)
@@ -120,7 +121,7 @@ func (r *sqliteUserRepo) List(ctx context.Context, offset, limit int) ([]*model.
 
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, username, email, password, role, is_active, wallpaper_limit, upload_size_limit,
-		       search_engine, search_engine_url, locale, created_at, updated_at, deleted_at
+		       storage_quota, search_engine, search_engine_url, locale, created_at, updated_at, deleted_at
 		FROM users WHERE deleted_at IS NULL
 		ORDER BY created_at DESC LIMIT ? OFFSET ?`, limit, offset)
 	if err != nil {
@@ -187,12 +188,12 @@ func scanUser(s scanner) (*model.User, error) {
 	var isActive int
 	var createdAt, updatedAt int64
 	var deletedAt sql.NullInt64
-	var wallpaperLimit, uploadSizeLimit sql.NullInt64
+	var wallpaperLimit, uploadSizeLimit, storageQuota sql.NullInt64
 	var searchEngineURL sql.NullString
 
 	err := s.Scan(
 		&u.ID, &u.Username, &u.Email, &u.Password, &u.Role,
-		&isActive, &wallpaperLimit, &uploadSizeLimit, &u.SearchEngine, &searchEngineURL,
+		&isActive, &wallpaperLimit, &uploadSizeLimit, &storageQuota, &u.SearchEngine, &searchEngineURL,
 		&u.Locale, &createdAt, &updatedAt, &deletedAt,
 	)
 	if err != nil {
@@ -212,6 +213,9 @@ func scanUser(s scanner) (*model.User, error) {
 	}
 	if uploadSizeLimit.Valid {
 		u.UploadSizeLimit = &uploadSizeLimit.Int64
+	}
+	if storageQuota.Valid {
+		u.StorageQuota = &storageQuota.Int64
 	}
 	if searchEngineURL.Valid {
 		u.SearchEngineURL = &searchEngineURL.String

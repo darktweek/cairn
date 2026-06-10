@@ -10,7 +10,8 @@ type User struct {
 	Role            string // "user" | "admin"
 	IsActive        bool
 	WallpaperLimit   *int   // nil = use global config default
-	UploadSizeLimit  *int64 // bytes; nil = use global config default
+	UploadSizeLimit  *int64 // max bytes for a single file upload; nil = use global CAIRN_MAX_UPLOAD_SIZE
+	StorageQuota     *int64 // max total media bytes; nil = use global CAIRN_STORAGE_QUOTA
 	SearchEngine    string  // "duckduckgo" | "google" | "brave" | "bing" | "kagi" | "custom"
 	SearchEngineURL *string // set only when SearchEngine == "custom"
 	Locale          string  // "fr" | "en" — interface language chosen by the user

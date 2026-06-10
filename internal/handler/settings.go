@@ -42,7 +42,8 @@ func (h *Handler) AdminGetSystemSettings(w http.ResponseWriter, r *http.Request)
 			"base_url":        sys.BaseURL,
 			"db_path":         sys.DBPath,
 			"media_path":      sys.MediaPath,
-			"max_upload_size": sys.MaxUploadSize,
+			"max_upload_size":         sys.MaxUploadSize,
+				"default_storage_quota":   sys.DefaultStorageQuota,
 			"trusted_proxy":   sys.TrustedProxy,
 			"session_secret":  sys.SessionSecretSet, // bool only, never the value
 		},

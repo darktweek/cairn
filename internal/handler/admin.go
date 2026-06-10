@@ -30,6 +30,9 @@ func userJSON(u *model.User) map[string]any {
 	if u.UploadSizeLimit != nil {
 		out["upload_size_limit"] = *u.UploadSizeLimit
 	}
+	if u.StorageQuota != nil {
+		out["storage_quota"] = *u.StorageQuota
+	}
 	return out
 }
 
@@ -143,6 +146,25 @@ func (h *Handler) AdminSetUploadSizeLimit(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := h.Admin.SetUploadSizeLimit(r.Context(), admin.ID, id, body.Limit); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) AdminSetStorageQuota(w http.ResponseWriter, r *http.Request) {
+	admin := middleware.UserFromCtx(r.Context())
+	id := chi.URLParam(r, "id")
+
+	var body struct {
+		Quota *int64 `json:"quota"` // bytes; null to reset to global default
+	}
+	if err := decode(r, &body); err != nil {
+		writeError(w, fmt.Errorf("%w: invalid JSON", service.ErrInvalidInput))
+		return
+	}
+
+	if err := h.Admin.SetStorageQuota(r.Context(), admin.ID, id, body.Quota); err != nil {
 		writeError(w, err)
 		return
 	}

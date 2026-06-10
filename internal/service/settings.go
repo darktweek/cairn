@@ -62,8 +62,9 @@ type SystemInfo struct {
 	BaseURL          string
 	DBPath           string
 	MediaPath        string
-	MaxUploadSize    int64
-	TrustedProxy     bool
+	MaxUploadSize        int64
+	DefaultStorageQuota  int64
+	TrustedProxy         bool
 	SessionSecretSet bool
 }
 
@@ -224,8 +225,9 @@ func (s *settingsService) SystemInfo() SystemInfo {
 		BaseURL:          s.cfg.BaseURL,
 		DBPath:           s.cfg.DBPath,
 		MediaPath:        s.cfg.MediaPath,
-		MaxUploadSize:    s.cfg.MaxUploadSize,
-		TrustedProxy:     s.cfg.TrustedProxy,
+		MaxUploadSize:       s.cfg.MaxUploadSize,
+		DefaultStorageQuota: s.cfg.DefaultStorageQuota,
+		TrustedProxy:        s.cfg.TrustedProxy,
 		SessionSecretSet: s.cfg.SessionSecret != "",
 	}
 }
