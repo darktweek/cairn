@@ -91,11 +91,27 @@ func (r *sqliteWallpaperRepo) UpdateSort(ctx context.Context, userID string, ids
 }
 
 func (r *sqliteWallpaperRepo) SetPinned(ctx context.Context, id, userID string, pinned bool) error {
-	_, err := r.db.ExecContext(ctx,
+	// Single-pin invariant: pinning a wallpaper unpins every other one.
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if pinned {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE wallpapers SET is_pinned = 0 WHERE user_id = ?`, userID,
+		); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
 		`UPDATE wallpapers SET is_pinned = ? WHERE id = ? AND user_id = ?`,
 		boolToInt(pinned), id, userID,
-	)
-	return err
+	); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *sqliteWallpaperRepo) CountByUser(ctx context.Context, userID string) (int, error) {

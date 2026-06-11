@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha1"
@@ -29,8 +27,7 @@ import (
 
 const (
 	sessionLifetime    = 30 * 24 * time.Hour
-	bookmarkletLifetime = 90 * 24 * time.Hour
-	resetTokenLifetime  = 1 * time.Hour
+	resetTokenLifetime = 1 * time.Hour
 	argon2Time         = 1
 	argon2Memory       = 64 * 1024 // 64 MB
 	argon2Threads      = 4
@@ -40,6 +37,7 @@ const (
 
 type AuthService interface {
 	Login(ctx context.Context, email, password, totpCode, ip, userAgent string) (*model.Session, string, error)
+	CreateSessionForUser(ctx context.Context, userID, ip, userAgent string) (*model.Session, string, error)
 	Logout(ctx context.Context, sessionID string) error
 	LogoutForUser(ctx context.Context, sessionID, userID string) error
 	LogoutAll(ctx context.Context, userID string) error
@@ -52,6 +50,15 @@ type AuthService interface {
 	DisableTOTP(ctx context.Context, userID, password string) error
 	ForgotPassword(ctx context.Context, email string) error
 	ResetPassword(ctx context.Context, token, newPassword string) error
+	// Registration flow (email-verified, TOTP-mandatory)
+	RequestRegistration(ctx context.Context, username, email string) error
+	ValidateSetupToken(ctx context.Context, token string) (username, email, totpSecret, totpURI string, err error)
+	CompleteSetup(ctx context.Context, token, password, totpCode string, ip, userAgent string) (*model.Session, string, error)
+	// Invite setup flow (for invite tokens)
+	PrepareInviteSetup(ctx context.Context, inviteToken, username string) (email, totpSecret, totpURI string, err error)
+	CompleteInviteSetup(ctx context.Context, inviteToken, password, totpCode string, ip, userAgent string) (*model.Session, string, error)
+	// Account deletion
+	DeleteAccount(ctx context.Context, userID, password string) error
 }
 
 type resetEntry struct {
@@ -62,11 +69,13 @@ type resetEntry struct {
 type authService struct {
 	repos       *repository.Repositories
 	cfg         *config.Config
+	settings    SettingsService
+	email       EmailService
 	resetTokens sync.Map // tokenHash → resetEntry
 }
 
-func newAuthService(repos *repository.Repositories, cfg *config.Config) AuthService {
-	return &authService{repos: repos, cfg: cfg}
+func newAuthService(repos *repository.Repositories, cfg *config.Config, settings SettingsService, email EmailService) AuthService {
+	return &authService{repos: repos, cfg: cfg, settings: settings, email: email}
 }
 
 // Login authenticates a user. totpCode is optional — if TOTP is enabled and empty, returns ErrTOTPRequired.
@@ -118,6 +127,24 @@ func (s *authService) Login(ctx context.Context, email, password, totpCode, ip, 
 		CreatedAt: time.Now(),
 	})
 
+	return sess, token, nil
+}
+
+// CreateSessionForUser issues a session for an already-authenticated user
+// (used by the SSO callback after the provider verified the identity).
+func (s *authService) CreateSessionForUser(ctx context.Context, userID, ip, userAgent string) (*model.Session, string, error) {
+	sess, token, err := s.createSession(ctx, userID, ip, userAgent, false)
+	if err != nil {
+		return nil, "", err
+	}
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:        ulid.Make().String(),
+		UserID:    &userID,
+		Action:    "login_sso",
+		IP:        ip,
+		UserAgent: userAgent,
+		CreatedAt: time.Now(),
+	})
 	return sess, token, nil
 }
 
@@ -185,10 +212,10 @@ func (s *authService) BeginTOTP(ctx context.Context, userID string) (string, str
 
 	qrURL := fmt.Sprintf(
 		"otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=6&period=30",
-		url.PathEscape(s.cfg.TOTPIssuer),
+		url.PathEscape(s.settings.TOTPIssuer(ctx).Value),
 		url.PathEscape(user.Email),
 		secret,
-		url.QueryEscape(s.cfg.TOTPIssuer),
+		url.QueryEscape(s.settings.TOTPIssuer(ctx).Value),
 	)
 
 	return secret, qrURL, nil
@@ -332,7 +359,7 @@ func (s *authService) createSession(ctx context.Context, userID, ip, userAgent s
 
 	lifetime := sessionLifetime
 	if isBookmarklet {
-		lifetime = bookmarkletLifetime
+		lifetime = time.Duration(s.settings.BookmarkletDays(ctx).Value) * 24 * time.Hour
 	}
 
 	sess := &model.Session{
@@ -467,55 +494,252 @@ func totpCode(secret string, counter uint64) string {
 
 // encryptAESGCM encrypts plaintext using AES-256-GCM, key derived from session secret.
 func (s *authService) encryptAESGCM(plaintext []byte) (string, error) {
-	key := deriveKey(s.cfg.SessionSecret)
-
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", err
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return "", err
-	}
-
-	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
-	return base64.RawStdEncoding.EncodeToString(ciphertext), nil
+	return encryptValue(deriveKey(s.cfg.SessionSecret), string(plaintext))
 }
 
 // decryptAESGCM decrypts a base64-encoded AES-GCM ciphertext.
 func (s *authService) decryptAESGCM(encoded string) ([]byte, error) {
-	data, err := base64.RawStdEncoding.DecodeString(encoded)
-	if err != nil {
-		return nil, err
-	}
-
-	key := deriveKey(s.cfg.SessionSecret)
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(data) < gcm.NonceSize() {
-		return nil, fmt.Errorf("ciphertext too short")
-	}
-
-	nonce, ciphertext := data[:gcm.NonceSize()], data[gcm.NonceSize():]
-	return gcm.Open(nil, nonce, ciphertext, nil)
+	pt, err := decryptValue(deriveKey(s.cfg.SessionSecret), encoded)
+	return []byte(pt), err
 }
 
-// deriveKey produces a 32-byte AES key from the session secret via SHA-256.
-func deriveKey(secret string) []byte {
-	h := sha256.Sum256([]byte(secret))
-	return h[:]
+const pendingRegLifetime = 24 * time.Hour
+
+// RequestRegistration validates username/email, creates a pending_registration, and sends the setup email.
+func (s *authService) RequestRegistration(ctx context.Context, username, email string) error {
+	if len(username) < 2 || len(username) > 32 {
+		return fmt.Errorf("%w: username must be 2–32 characters", ErrInvalidInput)
+	}
+	if len(email) < 3 {
+		return fmt.Errorf("%w: invalid email", ErrInvalidInput)
+	}
+
+	// Check uniqueness (don't reveal which one to avoid enumeration — return generic error).
+	if _, err := s.repos.Users.GetByUsername(ctx, username); err == nil {
+		return fmt.Errorf("%w: username or email already taken", ErrConflict)
+	}
+	if _, err := s.repos.Users.GetByEmail(ctx, email); err == nil {
+		return fmt.Errorf("%w: username or email already taken", ErrConflict)
+	}
+
+	totpSecret, err := generateTOTPSecret()
+	if err != nil {
+		return fmt.Errorf("generate totp secret: %w", err)
+	}
+	encryptedTOTP, err := s.encryptAESGCM([]byte(totpSecret))
+	if err != nil {
+		return fmt.Errorf("encrypt totp: %w", err)
+	}
+
+	token, err := generateRawToken()
+	if err != nil {
+		return fmt.Errorf("generate token: %w", err)
+	}
+
+	pr := &model.PendingRegistration{
+		ID:         ulid.Make().String(),
+		Username:   username,
+		Email:      email,
+		TokenHash:  hashToken(token),
+		TOTPSecret: encryptedTOTP,
+		ExpiresAt:  time.Now().Add(pendingRegLifetime),
+		CreatedAt:  time.Now(),
+	}
+	if err := s.repos.PendingRegistrations.Create(ctx, pr); err != nil {
+		return fmt.Errorf("create pending registration: %w", err)
+	}
+
+	setupURL := s.cfg.BaseURL + "/setup?token=" + token
+	slog.Info("registration requested", "username", username, "email", email, "setup_url", setupURL)
+	_ = s.email.SendAccountSetup(ctx, email, username, setupURL, pr.ExpiresAt)
+
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:     ulid.Make().String(),
+		Action: "registration_requested",
+		Metadata: map[string]any{
+			"username": username,
+			"email":    email,
+		},
+		CreatedAt: time.Now(),
+	})
+
+	return nil
+}
+
+// ValidateSetupToken validates a pending_registration token and returns the setup data.
+func (s *authService) ValidateSetupToken(ctx context.Context, token string) (username, email, totpSecret, totpURI string, err error) {
+	pr, err := s.repos.PendingRegistrations.GetByTokenHash(ctx, hashToken(token))
+	if err != nil {
+		return "", "", "", "", ErrUnauthorized
+	}
+	if pr.IsExpired() || pr.IsCompleted() {
+		return "", "", "", "", ErrUnauthorized
+	}
+
+	plain, err := s.decryptAESGCM(pr.TOTPSecret)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("decrypt totp: %w", err)
+	}
+	issuer := s.settings.TOTPIssuer(ctx).Value
+	uri := fmt.Sprintf(
+		"otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=6&period=30",
+		url.PathEscape(issuer), url.PathEscape(pr.Email),
+		string(plain), url.QueryEscape(issuer),
+	)
+	return pr.Username, pr.Email, string(plain), uri, nil
+}
+
+// CompleteSetup finalises a pending_registration: validates TOTP code, creates the user, and opens a session.
+func (s *authService) CompleteSetup(ctx context.Context, token, password, totpCode string, ip, userAgent string) (*model.Session, string, error) {
+	if len(password) < 12 {
+		return nil, "", fmt.Errorf("%w: password must be at least 12 characters", ErrInvalidInput)
+	}
+
+	pr, err := s.repos.PendingRegistrations.GetByTokenHash(ctx, hashToken(token))
+	if err != nil || pr.IsExpired() || pr.IsCompleted() {
+		return nil, "", ErrUnauthorized
+	}
+
+	plain, err := s.decryptAESGCM(pr.TOTPSecret)
+	if err != nil {
+		return nil, "", fmt.Errorf("decrypt totp: %w", err)
+	}
+	if !validateTOTPCode(string(plain), totpCode, time.Now()) {
+		return nil, "", ErrInvalidTOTP
+	}
+
+	userSvc := newUserService(s.repos, s.cfg)
+	user, err := userSvc.Register(ctx, pr.Username, pr.Email, password, ip, userAgent)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// Store TOTP as verified immediately.
+	if err := s.repos.TOTP.Create(ctx, user.ID, pr.TOTPSecret); err != nil {
+		return nil, "", fmt.Errorf("create totp: %w", err)
+	}
+	if err := s.repos.TOTP.Verify(ctx, user.ID); err != nil {
+		return nil, "", fmt.Errorf("verify totp: %w", err)
+	}
+
+	_ = s.repos.PendingRegistrations.MarkCompleted(ctx, pr.ID)
+
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:     ulid.Make().String(),
+		UserID: &user.ID,
+		Action: "registration_completed",
+		Metadata: map[string]any{
+			"username": user.Username,
+			"email":    user.Email,
+		},
+		IP:        ip,
+		CreatedAt: time.Now(),
+	})
+
+	sess, sessionToken, err := s.createSession(ctx, user.ID, ip, userAgent, false)
+	if err != nil {
+		return nil, "", err
+	}
+	return sess, sessionToken, nil
+}
+
+// PrepareInviteSetup generates (or reuses) a TOTP secret for an invite, stores username, returns setup data.
+func (s *authService) PrepareInviteSetup(ctx context.Context, inviteToken, username string) (email, totpSecret, totpURI string, err error) {
+	inv, err := s.repos.Invitations.GetByTokenHash(ctx, hashToken(inviteToken))
+	if err != nil || inv.IsExpired() || inv.IsUsed() {
+		return "", "", "", ErrUnauthorized
+	}
+
+	if len(username) < 2 || len(username) > 32 {
+		return "", "", "", fmt.Errorf("%w: username must be 2–32 characters", ErrInvalidInput)
+	}
+	// Username uniqueness check.
+	if _, uerr := s.repos.Users.GetByUsername(ctx, username); uerr == nil {
+		return "", "", "", fmt.Errorf("%w: username already taken", ErrConflict)
+	}
+
+	var plain string
+	if inv.TOTPSecret != "" {
+		// Already provisioned on a previous visit — reuse.
+		b, err := s.decryptAESGCM(inv.TOTPSecret)
+		if err != nil {
+			return "", "", "", fmt.Errorf("decrypt totp: %w", err)
+		}
+		plain = string(b)
+	} else {
+		plain, err = generateTOTPSecret()
+		if err != nil {
+			return "", "", "", fmt.Errorf("generate totp secret: %w", err)
+		}
+		encrypted, err := s.encryptAESGCM([]byte(plain))
+		if err != nil {
+			return "", "", "", fmt.Errorf("encrypt totp: %w", err)
+		}
+		if err := s.repos.Invitations.SetTOTPAndUsername(ctx, inv.ID, encrypted, username); err != nil {
+			return "", "", "", fmt.Errorf("store totp: %w", err)
+		}
+	}
+
+	issuer := s.settings.TOTPIssuer(ctx).Value
+	uri := fmt.Sprintf(
+		"otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=6&period=30",
+		url.PathEscape(issuer), url.PathEscape(inv.Email),
+		plain, url.QueryEscape(issuer),
+	)
+	return inv.Email, plain, uri, nil
+}
+
+// CompleteInviteSetup finalises an invite-based registration.
+func (s *authService) CompleteInviteSetup(ctx context.Context, inviteToken, password, totpCode string, ip, userAgent string) (*model.Session, string, error) {
+	if len(password) < 12 {
+		return nil, "", fmt.Errorf("%w: password must be at least 12 characters", ErrInvalidInput)
+	}
+
+	inv, err := s.repos.Invitations.GetByTokenHash(ctx, hashToken(inviteToken))
+	if err != nil || inv.IsExpired() || inv.IsUsed() {
+		return nil, "", ErrUnauthorized
+	}
+	if inv.TOTPSecret == "" || inv.Username == nil {
+		return nil, "", fmt.Errorf("%w: setup not initialised — visit the setup page first", ErrInvalidInput)
+	}
+
+	plain, err := s.decryptAESGCM(inv.TOTPSecret)
+	if err != nil {
+		return nil, "", fmt.Errorf("decrypt totp: %w", err)
+	}
+	if !validateTOTPCode(string(plain), totpCode, time.Now()) {
+		return nil, "", ErrInvalidTOTP
+	}
+
+	userSvc := newUserService(s.repos, s.cfg)
+	user, err := userSvc.Register(ctx, *inv.Username, inv.Email, password, ip, userAgent)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if err := s.repos.TOTP.Create(ctx, user.ID, inv.TOTPSecret); err != nil {
+		return nil, "", fmt.Errorf("create totp: %w", err)
+	}
+	if err := s.repos.TOTP.Verify(ctx, user.ID); err != nil {
+		return nil, "", fmt.Errorf("verify totp: %w", err)
+	}
+	_ = s.repos.Invitations.MarkUsed(ctx, inv.ID, time.Now())
+
+	sess, sessionToken, err := s.createSession(ctx, user.ID, ip, userAgent, false)
+	if err != nil {
+		return nil, "", err
+	}
+	return sess, sessionToken, nil
+}
+
+// DeleteAccount hard-deletes the calling user's account after password verification.
+func (s *authService) DeleteAccount(ctx context.Context, userID, password string) error {
+	user, err := s.repos.Users.GetByID(ctx, userID)
+	if err != nil {
+		return ErrNotFound
+	}
+	if !verifyPassword(password, user.Password) {
+		return ErrUnauthorized
+	}
+	return s.repos.Users.HardDelete(ctx, userID)
 }

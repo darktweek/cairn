@@ -8,21 +8,22 @@ import (
 )
 
 type Config struct {
-	// Serveur
+	// Server
 	Addr    string
 	Env     string
 	BaseURL string
 
-	// Base de données
+	// Database
 	DBPath    string
 	MediaPath string
 
-	// Sécurité
+	// Security
 	SessionSecret string
 
-	// Limites
+	// Limits
 	DefaultWallpaperLimit    int
-	MaxUploadSize            int64
+	MaxUploadSize            int64  // max size of a single uploaded file (default 50 MB)
+	DefaultStorageQuota      int64  // max total media storage per user (default 200 MB)
 	BookmarkletTokenLifetime int
 
 	// TOTP
@@ -31,6 +32,17 @@ type Config struct {
 	// Invitations
 	OpenRegistration bool
 	InviteLifetime   int // hours
+
+	// Menu — bang that opens the full-page hub. Empty = admin-editable (default !menu).
+	MenuBang string
+
+	// OIDC / SSO — when issuer+client are set here, they are locked (env-managed).
+	// Otherwise an admin may configure them from the panel.
+	OIDCIssuer       string
+	OIDCClientID     string
+	OIDCClientSecret string
+	OIDCProviderName string
+	OIDCScopes       string
 
 	// Proxy
 	TrustedProxy bool
@@ -53,11 +65,18 @@ func Load() (*Config, error) {
 		MediaPath:                getEnv("CAIRN_MEDIA_PATH", "/data/media"),
 		SessionSecret:            getEnv("CAIRN_SESSION_SECRET", ""),
 		DefaultWallpaperLimit:    getEnvInt("CAIRN_DEFAULT_WALLPAPER_LIMIT", 10),
-		MaxUploadSize:            getEnvInt64("CAIRN_MAX_UPLOAD_SIZE", 52428800),
+		MaxUploadSize:            getEnvInt64("CAIRN_MAX_UPLOAD_SIZE", 52428800),   // 50 MB
+		DefaultStorageQuota:      getEnvInt64("CAIRN_STORAGE_QUOTA", 209715200),   // 200 MB
 		BookmarkletTokenLifetime: getEnvInt("CAIRN_BOOKMARKLET_TOKEN_LIFETIME", 90),
 		TOTPIssuer:               getEnv("CAIRN_TOTP_ISSUER", "Cairn"),
 		OpenRegistration:         getEnvBool("CAIRN_OPEN_REGISTRATION", true),
 		InviteLifetime:           getEnvInt("CAIRN_INVITE_LIFETIME", 72),
+		MenuBang:                 getEnv("CAIRN_MENU_BANG", ""),
+		OIDCIssuer:               getEnv("CAIRN_OIDC_ISSUER", ""),
+		OIDCClientID:             getEnv("CAIRN_OIDC_CLIENT_ID", ""),
+		OIDCClientSecret:         getEnv("CAIRN_OIDC_CLIENT_SECRET", ""),
+		OIDCProviderName:         getEnv("CAIRN_OIDC_PROVIDER_NAME", ""),
+		OIDCScopes:               getEnv("CAIRN_OIDC_SCOPES", "openid profile email"),
 		TrustedProxy:             getEnvBool("CAIRN_TRUSTED_PROXY", true),
 		SMTPHost:                 getEnv("CAIRN_SMTP_HOST", ""),
 		SMTPPort:                 getEnvInt("CAIRN_SMTP_PORT", 587),
@@ -84,18 +103,10 @@ func (c *Config) validate() error {
 	if c.Env != "production" && c.Env != "development" {
 		errs = append(errs, fmt.Errorf("CAIRN_ENV must be 'production' or 'development', got %q", c.Env))
 	}
-	if c.SMTPHost == "" {
-		errs = append(errs, errors.New("CAIRN_SMTP_HOST is required"))
-	}
-	if c.SMTPUser == "" {
-		errs = append(errs, errors.New("CAIRN_SMTP_USER is required"))
-	}
-	if c.SMTPPass == "" {
-		errs = append(errs, errors.New("CAIRN_SMTP_PASS is required"))
-	}
-	if c.SMTPFrom == "" {
-		errs = append(errs, errors.New("CAIRN_SMTP_FROM is required"))
-	}
+
+	// SMTP is intentionally not required here: if it is not provided via the
+	// environment, an admin configures it through the web setup, after which it
+	// is stored in the database and used at send time.
 
 	return errors.Join(errs...)
 }

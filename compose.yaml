@@ -12,7 +12,8 @@ services:
       - ALL
     read_only: true
     tmpfs:
-      - /tmp:size=64m,mode=1777
+      # Doit être >= au plus grand upload autorisé (spool multipart temporaire).
+      - /tmp:size=256m,mode=1777
 
     volumes:
       - cairn_data:/data
@@ -23,18 +24,32 @@ services:
       CAIRN_BASE_URL:                   "http://localhost:8080"  # changer en https://... pour la prod
       CAIRN_DB_PATH:                    "/data/db.sqlite"
       CAIRN_MEDIA_PATH:                 "/data/media"
-      CAIRN_DEFAULT_WALLPAPER_LIMIT:    "10"
-      CAIRN_MAX_UPLOAD_SIZE:            "52428800"
-      CAIRN_TOTP_ISSUER:                "Cairn"
-      CAIRN_BOOKMARKLET_TOKEN_LIFETIME: "90"
+      CAIRN_MAX_UPLOAD_SIZE:            "52428800"   # 50 Mo — taille max d'un fichier (override par user possible)
+      CAIRN_STORAGE_QUOTA:              "209715200"  # 200 Mo — stockage total par user (override par user possible)
       CAIRN_TRUSTED_PROXY:              "true"
-      CAIRN_SMTP_HOST:                  "smtp.example.com"
-      CAIRN_SMTP_PORT:                  "587"
-      CAIRN_SMTP_FROM:                  "cairn@example.com"
-      CAIRN_SMTP_TLS:                   "true"
+      # Réglages applicatifs — laissés non définis ici pour rester éditables
+      # depuis Admin → Réglages → Système. Décommenter pour verrouiller.
+      # CAIRN_TOTP_ISSUER:                "Cairn"
+      # CAIRN_DEFAULT_WALLPAPER_LIMIT:    "10"
+      # CAIRN_BOOKMARKLET_TOKEN_LIFETIME: "90"
+      # Email (SMTP) — laissé non défini : à configurer via le setup web
+      # (Admin → Réglages → Système → Email). Décommenter pour verrouiller.
+      # CAIRN_SMTP_HOST:                  "smtp.example.com"
+      # CAIRN_SMTP_PORT:                  "587"
+      # CAIRN_SMTP_FROM:                  "cairn@example.com"
+      # CAIRN_SMTP_TLS:                   "true"
+      # Menu — bang qui ouvre le hub plein écran. Vide = éditable dans l'admin (défaut !menu).
+      # CAIRN_MENU_BANG:                "!menu"
+      # SSO / OIDC — décommenter pour verrouiller la config via le compose.
+      # Sinon, configurable depuis l'admin → Réglages → SSO.
+      # Redirect URI à déclarer côté provider : <BASE_URL>/api/auth/sso/callback
+      # CAIRN_OIDC_PROVIDER_NAME:       "Authentik"
+      # CAIRN_OIDC_ISSUER:              "https://auth.example.com/application/o/cairn/"
+      # CAIRN_OIDC_CLIENT_ID:           "cairn"
+      # CAIRN_OIDC_SCOPES:              "openid profile email"
 
     env_file:
-      - .env  # CAIRN_SESSION_SECRET, CAIRN_SMTP_USER, CAIRN_SMTP_PASS
+      - .env  # CAIRN_SESSION_SECRET (requis) ; CAIRN_SMTP_USER/PASS et CAIRN_OIDC_CLIENT_SECRET si verrouillés via compose
 
     networks:
       - traefik_proxy

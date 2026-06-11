@@ -109,6 +109,12 @@ func (h *Handler) ServeMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Isolation: a user only sees their own media (admins exempt).
+	if u := middleware.UserFromCtx(r.Context()); u == nil || (u.ID != userID && u.Role != "admin") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
 	base := mediaBasePath(r)
 	// filepath.Clean eliminates any ".." sequences before they reach the filesystem.
 	target := filepath.Clean(filepath.Join(base, userID, filename))

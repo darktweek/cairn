@@ -1,6 +1,6 @@
 # Cairn — Spec technique complète
 
-*État au 09 juin 2026*
+*État au 09 juin 2026 — voir « Écarts connus » en fin de document pour les évolutions postérieures (10 juin 2026).*
 
 ---
 
@@ -1434,3 +1434,47 @@ github.com/go-playground/validator/v10 ← validation structs
 18. Build multi-arch + push
 19. Repo GitHub `darktweek/cairn`
 ```
+
+---
+
+## 17. Écarts connus — évolutions postérieures à la spec (10 juin 2026)
+
+La spec ci-dessus décrit le MVP. Les évolutions suivantes sont implémentées
+et **font foi** lorsqu'elles contredisent les sections précédentes :
+
+### Inscription & invitations (remplace §0 « Pas d'inscription publique »)
+- Inscription ouverte optionnelle (toggle admin + `CAIRN_OPEN_REGISTRATION`) :
+  username+email → email de validation avec lien 24h → setup TOTP (obligatoire)
+  + mot de passe → compte créé. Table `pending_registrations` (migration 012).
+- Invitations par email (admin) : lien → username + TOTP + mot de passe.
+  Tables/colonnes : migrations 008-013.
+- Vue admin des demandes en attente avec révocation.
+
+### Suppression de comptes (remplace soft delete §8 AdminService)
+- `DeleteUser` admin = **hard delete RGPD** (purge DB transactionnelle +
+  suppression des médias). Le soft delete reste pour la suspension.
+- Auto-suppression par l'utilisateur (`DELETE /api/me` avec mot de passe).
+
+### Limites de stockage (complète §4 Config)
+- `CAIRN_MAX_UPLOAD_SIZE` (50 Mo) : taille max d'**un fichier**, override
+  par user (`users.upload_size_limit`, route admin dédiée).
+- `CAIRN_STORAGE_QUOTA` (200 Mo) : stockage média **total** par user,
+  override par user (`users.storage_quota`, migration 014).
+- La route d'upload applique la limite par user au niveau HTTP
+  (`middleware.UserBodyLimit`), exclue du cap global.
+
+### Audit (remplace §11 liste fermée d'actions)
+- La contrainte `CHECK(action IN ...)` de la migration 007 a été supprimée
+  (migration 015) — le vocabulaire des actions appartient à l'application.
+- Actions ajoutées : `login_sso`, `user_created_sso`,
+  `register_blocked_duplicate_email`, `registration_requested`,
+  `registration_completed`, `registration_revoked`, `invitation_sent`,
+  `invitation_revoked`.
+
+### Divers
+- SSO/OIDC optionnel (config env ou admin), réglages SMTP éditables en
+  admin si non verrouillés par l'env, locale par user (fr/en), menu hub
+  (`CAIRN_MENU_BANG`), effets visuels pluie + poussière, thème adaptatif
+  par luminance (crop central 200px, ré-échantillonnage vidéo 10s).
+- tmpfs `/tmp` du compose à 256m (spool multipart des gros uploads).
+- `/media/{userID}/*` : vérification de propriété (user = userID ou admin).

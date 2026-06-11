@@ -13,18 +13,23 @@ type Services struct {
 	Admin      AdminService
 	Email      EmailService
 	Invitation InvitationService
+	Settings   SettingsService
+	OIDC       OIDCService
 }
 
 func New(repos *repository.Repositories, cfg *config.Config) *Services {
-	auth  := newAuthService(repos, cfg)
-	email := newEmailService(cfg)
+	settings := newSettingsService(repos, cfg)
+	email := newEmailService(cfg, settings)
+	auth := newAuthService(repos, cfg, settings, email)
 	return &Services{
 		Auth:       auth,
 		User:       newUserService(repos, cfg),
 		Bookmark:   newBookmarkService(repos, cfg, auth),
-		Wallpaper:  newWallpaperService(repos, cfg),
+		Wallpaper:  newWallpaperService(repos, cfg, settings),
 		Admin:      newAdminService(repos, cfg),
 		Email:      email,
 		Invitation: newInvitationService(repos, cfg, email),
+		Settings:   settings,
+		OIDC:       newOIDCService(cfg, settings),
 	}
 }

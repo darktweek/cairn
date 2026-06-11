@@ -20,8 +20,13 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 		"is_active":         user.IsActive,
 		"search_engine":     user.SearchEngine,
 		"search_engine_url": user.SearchEngineURL,
-		"wallpaper_limit":   user.WallpaperLimit,
+		"wallpaper_limit":    user.WallpaperLimit,
+		"upload_size_limit":  user.UploadSizeLimit,
+		"storage_quota":      user.StorageQuota,
 		"created_at":        user.CreatedAt.Unix(),
+		"locale":            user.Locale,
+		"menu_bang":         h.Settings.MenuBang(r.Context()),
+		"smtp_configured":   h.Settings.SMTP(r.Context()).Configured(),
 	})
 }
 
@@ -106,6 +111,21 @@ func (h *Handler) RevokeAllSessions(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *Handler) GetMyStats(w http.ResponseWriter, r *http.Request) {
+	user := middleware.UserFromCtx(r.Context())
+	st, err := h.User.Stats(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"bookmarks":    st.Bookmarks,
+		"wallpapers":   st.Wallpapers,
+		"sessions":     st.Sessions,
+		"member_since": user.CreatedAt.Unix(),
+	})
+}
+
 func (h *Handler) GetMyAuditLog(w http.ResponseWriter, r *http.Request) {
 	user := middleware.UserFromCtx(r.Context())
 	offset, limit := pageParams(r)
@@ -116,9 +136,13 @@ func (h *Handler) GetMyAuditLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	out := make([]map[string]any, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, auditJSON(e))
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"total":   total,
-		"entries": entries,
+		"entries": out,
 	})
 }
 
@@ -132,8 +156,8 @@ func (h *Handler) BeginTOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{
-		"secret":   secret,
-		"qr_url":   qrURL,
+		"secret": secret,
+		"qr_url": qrURL,
 	})
 }
 
@@ -189,6 +213,42 @@ func (h *Handler) RevokeBookmarklet(w http.ResponseWriter, r *http.Request) {
 	// For MVP: LogoutAll — revoking all sessions is acceptable on homelab.
 	user := middleware.UserFromCtx(r.Context())
 	_ = h.Auth.LogoutAll(r.Context(), user.ID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Locale handler
+
+func (h *Handler) UpdateLocale(w http.ResponseWriter, r *http.Request) {
+	user := middleware.UserFromCtx(r.Context())
+	var body struct {
+		Locale string `json:"locale"`
+	}
+	if err := decode(r, &body); err != nil {
+		writeError(w, fmt.Errorf("%w: invalid JSON", service.ErrInvalidInput))
+		return
+	}
+	if err := h.User.UpdateLocale(r.Context(), user.ID, body.Locale); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// DeleteAccount hard-deletes the authenticated user's account after password confirmation.
+func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
+	user := middleware.UserFromCtx(r.Context())
+	var body struct {
+		Password string `json:"password"`
+	}
+	if err := decode(r, &body); err != nil {
+		writeError(w, fmt.Errorf("%w: invalid JSON", service.ErrInvalidInput))
+		return
+	}
+	if err := h.Auth.DeleteAccount(r.Context(), user.ID, body.Password); err != nil {
+		writeError(w, err)
+		return
+	}
+	h.clearSessionCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 

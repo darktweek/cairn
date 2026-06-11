@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr" data-theme="dark">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,96 +16,148 @@
   <img id="bg-image" class="bg-layer bg-hidden" alt="">
   <video id="bg-video" class="bg-layer bg-hidden" autoplay muted loop playsinline></video>
   <canvas id="rain-canvas"></canvas>
+  <canvas id="dust-canvas"></canvas>
+  <div id="spotlight-overlay"></div>
 
   <!-- ── Login ── -->
   <div id="view-login" class="view">
     <div class="login-card">
       <h1 class="login-title">Cairn</h1>
 
+      <div id="sso-block" class="hidden">
+        <a id="sso-btn" class="btn btn-primary btn-full" href="/api/auth/sso/login">
+          <span data-i18n="login.sso">Sign in with SSO</span> <span id="sso-provider"></span>
+        </a>
+        <div class="sso-divider"><span data-i18n="login.or">or</span></div>
+      </div>
+
       <form id="login-form" novalidate>
         <div class="form-group">
           <label class="form-label" for="login-email">Email</label>
-          <input type="email" id="login-email" class="form-input" placeholder="vous@exemple.com"
+          <input type="email" id="login-email" class="form-input" placeholder="you@example.com"
                  autocomplete="email" required>
         </div>
         <div class="form-group">
-          <label class="form-label" for="login-password">Mot de passe</label>
+          <label class="form-label" for="login-password" data-i18n="login.password">Password</label>
           <input type="password" id="login-password" class="form-input" placeholder="••••••••••••"
                  autocomplete="current-password" required>
         </div>
         <div id="totp-group" class="form-group hidden">
-          <label class="form-label" for="login-totp">Code TOTP</label>
+          <label class="form-label" for="login-totp" data-i18n="login.totp">TOTP Code</label>
           <input type="text" id="login-totp" class="form-input" placeholder="123456"
                  maxlength="6" inputmode="numeric" autocomplete="one-time-code">
         </div>
         <div id="login-error" class="error-msg"></div>
-        <button type="submit" class="btn btn-primary btn-full">Se connecter</button>
+        <button type="submit" class="btn btn-primary btn-full" data-i18n="login.submit">Sign in</button>
       </form>
 
       <form id="forgot-form" class="hidden" novalidate>
-        <p class="text-sm text-dim text-center">
-          Entrez votre email, vous recevrez un lien de réinitialisation.
-        </p>
+        <p class="text-sm text-dim text-center" data-i18n="forgot.hint">Enter your email and we'll send a reset link.</p>
         <div class="form-group">
           <label class="form-label" for="forgot-email">Email</label>
-          <input type="email" id="forgot-email" class="form-input" placeholder="vous@exemple.com"
+          <input type="email" id="forgot-email" class="form-input" placeholder="you@example.com"
                  autocomplete="email">
         </div>
         <div id="forgot-msg" class="error-msg"></div>
         <div class="flex gap-1">
-          <button type="button" id="forgot-back" class="btn btn-secondary flex-1">Retour</button>
-          <button type="submit" class="btn btn-primary flex-1">Envoyer</button>
+          <button type="button" id="forgot-back" class="btn btn-secondary flex-1" data-i18n="forgot.back">Back</button>
+          <button type="submit" class="btn btn-primary flex-1" data-i18n="forgot.submit">Send reset link</button>
         </div>
       </form>
 
+      <!-- Step 1: request account (open registration) — username + email only -->
       <form id="register-form" class="hidden" novalidate>
-        <div class="form-group">
-          <label class="form-label" for="reg-username">Nom d'utilisateur</label>
-          <input type="text" id="reg-username" class="form-input" placeholder="alice"
-                 autocomplete="username" required>
+        <div id="reg-inputs">
+          <p class="text-sm text-dim text-center mb-1" data-i18n="register.hint">Enter your details — you'll receive a setup link by email.</p>
+          <div class="form-group">
+            <label class="form-label" for="reg-username" data-i18n="register.username">Username</label>
+            <input type="text" id="reg-username" class="form-input" placeholder="alice"
+                   autocomplete="username" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reg-email" data-i18n="register.email">Email</label>
+            <input type="email" id="reg-email" class="form-input" placeholder="you@example.com"
+                   autocomplete="email" required>
+          </div>
+          <div id="reg-error" class="error-msg"></div>
+          <div class="flex gap-1">
+            <button type="button" id="reg-back" class="btn btn-secondary flex-1" data-i18n="register.back">Back</button>
+            <button type="submit" id="reg-submit" class="btn btn-primary flex-1" data-i18n="register.submit">Request account</button>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="reg-email">Email</label>
-          <input type="email" id="reg-email" class="form-input" placeholder="vous@exemple.com"
-                 autocomplete="email" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="reg-password">Mot de passe</label>
-          <input type="password" id="reg-password" class="form-input" placeholder="min. 12 caractères"
-                 autocomplete="new-password" required>
-        </div>
-        <div id="reg-error" class="error-msg"></div>
-        <div class="flex gap-1">
-          <button type="button" id="reg-back" class="btn btn-secondary flex-1">Retour</button>
-          <button type="submit" class="btn btn-primary flex-1">Créer un compte</button>
+        <div id="reg-success" class="hidden">
+          <p class="text-sm text-center mb-1 reg-success-text" id="reg-success-msg"></p>
+          <button type="button" id="reg-back-2" class="btn btn-secondary w-full" data-i18n="register.back">Back</button>
         </div>
       </form>
 
       <div id="login-links">
-        <button type="button" id="forgot-link" class="forgot-link">Mot de passe oublié ?</button>
-        <button type="button" id="register-link" class="forgot-link">Pas encore de compte ?</button>
+        <button type="button" id="forgot-link" class="forgot-link" data-i18n="login.forgot">Forgot password?</button>
+        <button type="button" id="register-link" class="forgot-link hidden" data-i18n="login.register">No account yet?</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Account Setup (post-invite / post-registration-email) ── -->
+  <div id="view-setup" class="view hidden">
+    <div class="login-card">
+      <h1 class="login-title" data-i18n="setup.title">Account setup</h1>
+
+      <!-- Step 1: username (invite flow only) + TOTP QR -->
+      <div id="setup-step-totp">
+        <p class="text-sm text-dim text-center mb-1" id="setup-greeting"></p>
+        <!-- Username field shown only for invite flow -->
+        <div id="setup-username-group" class="form-group hidden">
+          <label class="form-label" data-i18n="register.username">Username</label>
+          <input type="text" id="setup-username" class="form-input" placeholder="alice" autocomplete="username">
+        </div>
+        <div id="setup-totp-wrap" class="hidden">
+          <p class="text-sm text-dim text-center mb-1" data-i18n="setup.totp.hint">Scan with your authenticator app</p>
+          <div id="setup-qr" class="setup-qr"></div>
+          <span id="setup-totp-secret" class="hidden"></span>
+          <div class="form-group mt-1">
+            <label class="form-label" data-i18n="login.totp">TOTP Code</label>
+            <input type="text" id="setup-totp-code" class="form-input" placeholder="123456" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+          </div>
+        </div>
+        <div id="setup-step1-error" class="error-msg"></div>
+        <button type="button" id="setup-next-btn" class="btn btn-primary btn-full mt-1" data-i18n="setup.next">Next</button>
+      </div>
+
+      <!-- Step 2: password -->
+      <div id="setup-step-password" class="hidden">
+        <p class="text-sm text-dim text-center mb-1" data-i18n="setup.password.hint">Choose a strong password (min. 12 characters)</p>
+        <div class="form-group">
+          <label class="form-label" data-i18n="register.password">Password</label>
+          <input type="password" id="setup-password" class="form-input"
+                 data-i18n-attr="placeholder" data-i18n="register.password.hint"
+                 autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="setup.password.confirm">Confirm password</label>
+          <input type="password" id="setup-password2" class="form-input" placeholder="••••••••••••"
+                 autocomplete="new-password">
+        </div>
+        <div id="setup-step2-error" class="error-msg"></div>
+        <div class="flex gap-1 mt-1">
+          <button type="button" id="setup-back-btn" class="btn btn-secondary flex-1" data-i18n="register.back">Back</button>
+          <button type="button" id="setup-finish-btn" class="btn btn-primary flex-1" data-i18n="setup.finish">Create account</button>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- ── Home ── -->
   <div id="view-home" class="view hidden">
-    <nav class="home-nav">
-      <button class="nav-btn" id="btn-bookmarks">Marque-pages</button>
-      <button class="nav-btn" id="btn-settings">Compte</button>
-      <button class="nav-btn hidden" id="btn-admin">Admin</button>
-      <button class="nav-btn" id="btn-logout">Quitter</button>
-    </nav>
-
     <div class="home-center">
       <div id="clock" class="clock">00:00</div>
       <div id="date-line" class="date-line"></div>
       <div class="search-wrap">
         <form class="search-form" id="search-form">
           <input type="text" id="search-input" class="search-input"
-                 placeholder="Rechercher…  !bm pour les marque-pages"
+                 placeholder="Search…"
                  autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-          <button type="submit" class="search-btn" aria-label="Rechercher">
+          <button type="submit" class="search-btn" aria-label="Search">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="11" cy="11" r="8"/>
@@ -113,6 +165,57 @@
             </svg>
           </button>
         </form>
+        <div id="search-suggestions" class="search-suggestions"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Hub (menu bang) ── -->
+  <div id="hub-overlay" class="hub-overlay hidden">
+    <div class="hub-inner">
+      <div class="hub-head">
+        <span class="hub-greeting" id="hub-greeting">Menu</span>
+        <button class="hub-close" id="hub-close" aria-label="Close">✕</button>
+      </div>
+      <button type="button" id="hub-setup" class="hub-setup hidden" data-i18n="hub.setup">
+        SMTP setup required
+      </button>
+      <div class="hub-grid">
+        <button class="hub-tile" id="tile-bookmarks">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+          </svg>
+          <span class="hub-tile-label" data-i18n="hub.bookmarks">Bookmarks</span>
+          <span class="hub-tile-sub" data-i18n="hub.bookmarks.sub">Browse &amp; search</span>
+        </button>
+        <button class="hub-tile" id="tile-settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>
+          </svg>
+          <span class="hub-tile-label" data-i18n="hub.account">Account</span>
+          <span class="hub-tile-sub" data-i18n="hub.account.sub">Profile, security</span>
+        </button>
+        <button class="hub-tile" id="tile-theme">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+          </svg>
+          <span class="hub-tile-label" data-i18n="hub.theme">Theme</span>
+          <span class="hub-tile-sub" data-i18n="hub.theme.sub">Wallpapers &amp; effects</span>
+        </button>
+        <button class="hub-tile hidden" id="tile-admin">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2l8 4v6c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6z"/>
+          </svg>
+          <span class="hub-tile-label" data-i18n="hub.admin">Administration</span>
+          <span class="hub-tile-sub" data-i18n="hub.admin.sub">Users, settings</span>
+        </button>
+        <button class="hub-tile hub-tile-danger" id="tile-logout">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>
+          </svg>
+          <span class="hub-tile-label" data-i18n="hub.logout">Sign out</span>
+          <span class="hub-tile-sub" data-i18n="hub.logout.sub">Close session</span>
+        </button>
       </div>
     </div>
   </div>
@@ -121,18 +224,18 @@
   <div id="overlay-bookmarks" class="panel-overlay hidden">
     <div class="panel panel-wide">
       <div class="panel-header">
-        <span class="panel-title">Marque-pages</span>
-        <button class="btn btn-secondary" id="bm-add-btn">+ Ajouter</button>
-        <label class="btn btn-secondary bm-import-label" for="bm-import-file">Importer</label>
+        <span class="panel-title" data-i18n="panel.bookmarks">Bookmarks</span>
+        <button class="btn btn-secondary" id="bm-add-btn" data-i18n="bm.add">+ Add</button>
+        <label class="btn btn-secondary bm-import-label" for="bm-import-file" data-i18n="bm.import">Import</label>
         <input type="file" id="bm-import-file" accept=".html" class="sr-only">
-        <button class="btn btn-secondary" id="bm-export-btn">Exporter</button>
+        <button class="btn btn-secondary" id="bm-export-btn" data-i18n="bm.export">Export</button>
         <button class="panel-close" id="bm-close">✕</button>
       </div>
       <div class="bm-filter-bar">
         <input type="text" id="bm-search-input" class="form-input bm-search-input"
-               placeholder="Filtrer les marque-pages…">
+               data-i18n="bm.search.placeholder" data-i18n-attr="placeholder" placeholder="Filter bookmarks…">
         <select id="bm-folder-filter" class="form-input bm-folder-select">
-          <option value="">Tous les dossiers</option>
+          <option value="" data-i18n="bm.all.folders">All folders</option>
         </select>
       </div>
       <div class="panel-body" id="bm-list"></div>
@@ -143,18 +246,32 @@
   <div id="overlay-settings" class="panel-overlay hidden">
     <div class="panel">
       <div class="panel-header">
-        <span class="panel-title">Mon compte</span>
+        <span class="panel-title" data-i18n="panel.account">My account</span>
         <button class="panel-close" id="settings-close">✕</button>
       </div>
       <div class="tabs" id="settings-tabs">
-        <button class="tab active" data-tab="profile">Profil</button>
-        <button class="tab" data-tab="security">Sécurité</button>
-        <button class="tab" data-tab="engine">Recherche</button>
-        <button class="tab" data-tab="sessions">Sessions</button>
-        <button class="tab" data-tab="wallpapers">Fonds d'écran</button>
-        <button class="tab" data-tab="bookmarklet">Bookmarklet</button>
+        <button class="tab active" data-tab="profile" data-i18n="tab.profile">Profile</button>
+        <button class="tab" data-tab="security" data-i18n="tab.security">Security</button>
+        <button class="tab" data-tab="engine" data-i18n="tab.engine">Search</button>
+        <button class="tab" data-tab="sessions" data-i18n="tab.sessions">Sessions</button>
+        <button class="tab" data-tab="bookmarklet" data-i18n="tab.bookmarklet">Bookmarklet</button>
       </div>
       <div class="panel-body" id="settings-body"></div>
+    </div>
+  </div>
+
+  <!-- ── Theme overlay ── -->
+  <div id="overlay-theme" class="panel-overlay hidden">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title" data-i18n="panel.theme">Theme</span>
+        <button class="panel-close" id="theme-close">✕</button>
+      </div>
+      <div class="tabs" id="theme-tabs">
+        <button class="tab active" data-tab="wallpapers" data-i18n="tab.wallpapers">Wallpapers</button>
+        <button class="tab" data-tab="effects" data-i18n="tab.effects">Effects</button>
+      </div>
+      <div class="panel-body" id="theme-body"></div>
     </div>
   </div>
 
@@ -162,14 +279,15 @@
   <div id="overlay-admin" class="panel-overlay hidden">
     <div class="panel panel-wide">
       <div class="panel-header">
-        <span class="panel-title">Administration</span>
+        <span class="panel-title" data-i18n="panel.admin">Administration</span>
         <button class="panel-close" id="admin-close">✕</button>
       </div>
       <div class="tabs" id="admin-tabs">
-        <button class="tab active" data-tab="stats">Statistiques</button>
-        <button class="tab" data-tab="users">Utilisateurs</button>
-        <button class="tab" data-tab="invitations">Invitations</button>
-        <button class="tab" data-tab="audit">Journal</button>
+        <button class="tab active" data-tab="stats" data-i18n="tab.stats">Statistics</button>
+        <button class="tab" data-tab="users" data-i18n="tab.users">Users</button>
+        <button class="tab" data-tab="invitations" data-i18n="tab.invitations">Invitations</button>
+        <button class="tab" data-tab="settings" data-i18n="tab.settings">Settings</button>
+        <button class="tab" data-tab="audit" data-i18n="tab.audit">Audit log</button>
       </div>
       <div class="panel-body" id="admin-body"></div>
     </div>
@@ -178,27 +296,30 @@
   <!-- ── Bookmark add/edit modal ── -->
   <div id="modal-bookmark" class="modal-overlay hidden">
     <div class="modal">
-      <div class="modal-title" id="modal-bm-title">Ajouter un marque-page</div>
+      <div class="modal-title" id="modal-bm-title" data-i18n="bm.modal.add">Add bookmark</div>
       <div class="form-group">
         <label class="form-label" for="modal-bm-url">URL</label>
-        <input type="url" id="modal-bm-url" class="form-input" placeholder="https://exemple.com">
+        <input type="url" id="modal-bm-url" class="form-input" placeholder="https://example.com">
       </div>
       <div class="form-group">
-        <label class="form-label" for="modal-bm-title-input">Titre</label>
-        <input type="text" id="modal-bm-title-input" class="form-input" placeholder="Titre du marque-page">
+        <label class="form-label" for="modal-bm-title-input" data-i18n="bm.modal.title">Title</label>
+        <input type="text" id="modal-bm-title-input" class="form-input"
+               data-i18n="bm.modal.title.ph" data-i18n-attr="placeholder" placeholder="Bookmark title">
       </div>
       <div class="form-group">
-        <label class="form-label" for="modal-bm-folder">Dossier</label>
-        <input type="text" id="modal-bm-folder" class="form-input" placeholder="Dev/Go  (laisser vide pour aucun)">
+        <label class="form-label" for="modal-bm-folder" data-i18n="bm.modal.folder">Folder</label>
+        <input type="text" id="modal-bm-folder" class="form-input"
+               data-i18n="bm.modal.folder.ph" data-i18n-attr="placeholder" placeholder="Dev/Go  (leave empty for none)">
       </div>
       <div class="form-group">
-        <label class="form-label" for="modal-bm-tags">Tags</label>
-        <input type="text" id="modal-bm-tags" class="form-input" placeholder="homelab, selfhosted  (séparés par des virgules)">
+        <label class="form-label" for="modal-bm-tags" data-i18n="bm.modal.tags">Tags</label>
+        <input type="text" id="modal-bm-tags" class="form-input"
+               data-i18n="bm.modal.tags.ph" data-i18n-attr="placeholder" placeholder="homelab, selfhosted  (comma-separated)">
       </div>
       <div id="modal-bm-error" class="error-msg"></div>
       <div class="modal-footer">
-        <button type="button" id="modal-bm-cancel" class="btn btn-secondary">Annuler</button>
-        <button type="button" id="modal-bm-save" class="btn btn-primary">Enregistrer</button>
+        <button type="button" id="modal-bm-cancel" class="btn btn-secondary" data-i18n="btn.cancel">Cancel</button>
+        <button type="button" id="modal-bm-save" class="btn btn-primary" data-i18n="btn.save">Save</button>
       </div>
     </div>
   </div>
@@ -206,23 +327,24 @@
   <!-- ── New user modal (admin) ── -->
   <div id="modal-new-user" class="modal-overlay hidden">
     <div class="modal">
-      <div class="modal-title">Créer un utilisateur</div>
+      <div class="modal-title" data-i18n="admin.user.create">Create user</div>
       <div class="form-group">
-        <label class="form-label" for="nu-username">Nom d'utilisateur</label>
+        <label class="form-label" for="nu-username" data-i18n="profile.username">Username</label>
         <input type="text" id="nu-username" class="form-input" placeholder="alice">
       </div>
       <div class="form-group">
         <label class="form-label" for="nu-email">Email</label>
-        <input type="email" id="nu-email" class="form-input" placeholder="alice@exemple.com">
+        <input type="email" id="nu-email" class="form-input" placeholder="alice@example.com">
       </div>
       <div class="form-group">
-        <label class="form-label" for="nu-password">Mot de passe temporaire</label>
-        <input type="password" id="nu-password" class="form-input" placeholder="min. 12 caractères">
+        <label class="form-label" for="nu-password" data-i18n="admin.user.temp.password">Temporary password</label>
+        <input type="password" id="nu-password" class="form-input"
+               data-i18n="register.password.hint" data-i18n-attr="placeholder">
       </div>
       <div id="nu-error" class="error-msg"></div>
       <div class="modal-footer">
-        <button type="button" id="nu-cancel" class="btn btn-secondary">Annuler</button>
-        <button type="button" id="nu-save" class="btn btn-primary">Créer</button>
+        <button type="button" id="nu-cancel" class="btn btn-secondary" data-i18n="btn.cancel">Cancel</button>
+        <button type="button" id="nu-save" class="btn btn-primary" data-i18n="admin.user.create.btn">Create</button>
       </div>
     </div>
   </div>

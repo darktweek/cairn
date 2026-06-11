@@ -24,25 +24,33 @@ var welcomeTmpl string
 //go:embed templates/invitation.html
 var invitationTmpl string
 
+//go:embed templates/account_setup.html
+var accountSetupTmpl string
+
 type EmailService interface {
 	SendPasswordReset(ctx context.Context, email, token string) error
 	SendWelcome(ctx context.Context, email, username string) error
 	SendInvitation(ctx context.Context, email, inviteURL string, expiresAt time.Time) error
+	SendAccountSetup(ctx context.Context, email, username, setupURL string, expiresAt time.Time) error
 }
 
 type emailService struct {
 	cfg           *config.Config
+	settings      SettingsService
 	passwordReset *template.Template
 	welcome       *template.Template
 	invitation    *template.Template
+	accountSetup  *template.Template
 }
 
-func newEmailService(cfg *config.Config) EmailService {
+func newEmailService(cfg *config.Config, settings SettingsService) EmailService {
 	return &emailService{
 		cfg:           cfg,
+		settings:      settings,
 		passwordReset: template.Must(template.New("password_reset").Parse(passwordResetTmpl)),
 		welcome:       template.Must(template.New("welcome").Parse(welcomeTmpl)),
 		invitation:    template.Must(template.New("invitation").Parse(invitationTmpl)),
+		accountSetup:  template.Must(template.New("account_setup").Parse(accountSetupTmpl)),
 	}
 }
 
@@ -63,7 +71,7 @@ func (s *emailService) SendPasswordReset(ctx context.Context, email, token strin
 		return nil
 	}
 
-	if err := s.send(email, "Réinitialisation de mot de passe — Cairn", body); err != nil {
+	if err := s.send(ctx, email, "Réinitialisation de mot de passe — Cairn", body); err != nil {
 		slog.Error("send password reset email", "err", err)
 	}
 	return nil
@@ -84,7 +92,7 @@ func (s *emailService) SendWelcome(ctx context.Context, email, username string) 
 		return nil
 	}
 
-	if err := s.send(email, "Bienvenue sur Cairn", body); err != nil {
+	if err := s.send(ctx, email, "Bienvenue sur Cairn", body); err != nil {
 		slog.Error("send welcome email", "err", err)
 	}
 	return nil
@@ -103,39 +111,68 @@ func (s *emailService) SendInvitation(ctx context.Context, email, inviteURL stri
 		slog.Error("render invitation email", "err", err)
 		return nil
 	}
-	if err := s.send(email, "Invitation à rejoindre Cairn", body); err != nil {
+	if err := s.send(ctx, email, "Invitation à rejoindre Cairn", body); err != nil {
 		slog.Error("send invitation email", "err", err)
 	}
 	return nil
 }
 
-func (s *emailService) send(to, subject, htmlBody string) error {
-	addr := fmt.Sprintf("%s:%d", s.cfg.SMTPHost, s.cfg.SMTPPort)
+func (s *emailService) SendAccountSetup(ctx context.Context, email, username, setupURL string, expiresAt time.Time) error {
+	data := struct {
+		Username  string
+		SetupURL  string
+		ExpiresAt string
+	}{
+		Username:  username,
+		SetupURL:  setupURL,
+		ExpiresAt: expiresAt.Format("02/01/2006 à 15:04"),
+	}
+	body, err := renderTemplate(s.accountSetup, data)
+	if err != nil {
+		slog.Error("render account setup email", "err", err)
+		return nil
+	}
+	if err := s.send(ctx, email, "Finalisez votre compte Cairn", body); err != nil {
+		slog.Error("send account setup email", "err", err)
+	}
+	return nil
+}
+
+func (s *emailService) send(ctx context.Context, to, subject, htmlBody string) error {
+	cfg := s.settings.SMTP(ctx)
+	if !cfg.Configured() {
+		slog.Warn("email not sent: SMTP is not configured", "to", to, "subject", subject)
+		return nil
+	}
+
+	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 
 	conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
 	if err != nil {
 		return fmt.Errorf("smtp dial: %w", err)
 	}
 
-	c, err := smtp.NewClient(conn, s.cfg.SMTPHost)
+	c, err := smtp.NewClient(conn, cfg.Host)
 	if err != nil {
 		return fmt.Errorf("smtp client: %w", err)
 	}
 	defer c.Close()
 
-	if s.cfg.SMTPTLS {
-		tlsCfg := &tls.Config{ServerName: s.cfg.SMTPHost}
+	if cfg.TLS {
+		tlsCfg := &tls.Config{ServerName: cfg.Host}
 		if err := c.StartTLS(tlsCfg); err != nil {
 			return fmt.Errorf("starttls: %w", err)
 		}
 	}
 
-	auth := smtp.PlainAuth("", s.cfg.SMTPUser, s.cfg.SMTPPass, s.cfg.SMTPHost)
-	if err := c.Auth(auth); err != nil {
-		return fmt.Errorf("smtp auth: %w", err)
+	if cfg.User != "" {
+		auth := smtp.PlainAuth("", cfg.User, cfg.Pass, cfg.Host)
+		if err := c.Auth(auth); err != nil {
+			return fmt.Errorf("smtp auth: %w", err)
+		}
 	}
 
-	if err := c.Mail(s.cfg.SMTPFrom); err != nil {
+	if err := c.Mail(cfg.From); err != nil {
 		return fmt.Errorf("smtp mail from: %w", err)
 	}
 	if err := c.Rcpt(to); err != nil {
@@ -150,7 +187,7 @@ func (s *emailService) send(to, subject, htmlBody string) error {
 
 	msg := fmt.Sprintf(
 		"From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n%s",
-		s.cfg.SMTPFrom, to, subject, htmlBody,
+		cfg.From, to, subject, htmlBody,
 	)
 
 	if _, err := fmt.Fprint(w, msg); err != nil {
