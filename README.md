@@ -5,6 +5,8 @@ Clock, ambient effects, wallpapers, configurable search, bookmarks, multi-user w
 
 > **No cloud. No tracking. Runs entirely on your own machine or server.**
 
+This project is **100% vibecoded** — designed and built in conversation with AI (Claude Code), iterated feature by feature on a homelab. Craftsmanship for the joy of it, not for scale.
+
 ---
 
 ## What it looks like
@@ -95,13 +97,20 @@ CAIRN_SMTP_FROM: "cairn@example.com"
 
 For local testing, `http://localhost:8080` is fine.
 
-### Step 4 — Start
+### Step 4 — Build & start
+
+There is no published Docker image (yet) — the image is **built locally from this repo**, automatically:
 
 ```bash
-docker compose up -d
+# One-time: the default compose file expects this network (used for Traefik).
+# Create it even if you don't use Traefik, or remove the networks/labels
+# sections from compose.yaml.
+docker network create traefik_proxy
+
+docker compose up -d --build
 ```
 
-The first run downloads the Go builder image and compiles the binary (~2 minutes on first run, instant after).
+The first run downloads the Go builder image and compiles everything (~2 minutes). Subsequent starts are instant.
 
 ### Step 5 — Open in your browser
 
@@ -252,32 +261,19 @@ When open registration is enabled, users submit their email and the admin approv
 
 ---
 
-## Development
+## Making changes
 
-Go doesn't need to be installed locally — Docker handles everything.
+You don't need Go installed on your machine — everything compiles inside Docker.
+
+The workflow is simple: edit the code, then rebuild and restart the container:
 
 ```bash
-# Build the binary (optional check)
-docker run --rm \
-  -v "$(pwd)":/app \
-  -v cairn-gomod-cache:/root/go/pkg/mod \
-  -w /app \
-  golang:1.23-alpine \
-  go build ./...
-
-# Build multi-arch image locally (no push)
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  --tag cairn:dev \
-  .
+docker compose up -d --build
 ```
 
-**Development mode** — set `CAIRN_ENV=development` for text logs instead of JSON:
+That's it. The `--build` flag recompiles the app with your changes before restarting it.
 
-```yaml
-# in compose.yaml
-CAIRN_ENV: "development"
-```
+**Tip:** set `CAIRN_ENV: "development"` in `compose.yaml` to get human-readable text logs instead of JSON.
 
 ---
 

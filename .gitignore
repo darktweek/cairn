@@ -5,3 +5,6 @@ data/
 *.sqlite-shm
 cairn
 cairn-bin
+
+# Roadmap interne — ne pas publier
+cairn-spec.md

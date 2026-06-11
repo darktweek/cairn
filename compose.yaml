@@ -2,6 +2,8 @@ name: cairn
 
 services:
   cairn:
+    # Pas d'image publiée — l'image est construite localement depuis ce repo.
+    build: .
     image: cairn:latest
     container_name: cairn
     restart: unless-stopped
