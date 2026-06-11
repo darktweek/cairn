@@ -812,7 +812,9 @@ function sampleLuminance(media) {
       n++;
     }
     const lum = sum / n;
-    document.documentElement.dataset.theme = lum > 140 ? 'light' : 'dark';
+    // Biased toward dark (white text, the zen default) — light only wins on
+    // clearly bright backgrounds.
+    document.documentElement.dataset.theme = lum > 150 ? 'light' : 'dark';
   } catch {
     // Tainted canvas (video DRM or browser restriction) — keep current theme
   }
