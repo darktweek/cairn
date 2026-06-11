@@ -773,32 +773,46 @@ function resampleTheme() {
   else document.documentElement.dataset.theme = 'dark'; // gradient fallback is dark
 }
 
+// Resizing changes the visible cover crop → the sampled band moves with it.
+let _resampleTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_resampleTimer);
+  _resampleTimer = setTimeout(resampleTheme, 300);
+});
+
 function sampleLuminance(media) {
   _bgMedia = media;
   if (themeMode() !== 'auto') return;
-  // Sample a center crop — that's where the clock and search sit, so the
-  // theme follows what the text actually overlaps (cf. go-startpage).
+  // The background uses object-fit: cover, so what's on screen is a crop of
+  // the source — a fixed center crop of the source can land on a region the
+  // text never overlaps. Reproduce the cover mapping, then sample the wide
+  // band where clock, date and search actually sit.
   // Some browsers taint the canvas even for same-origin video — wrap carefully.
   try {
-    const SIZE = 200;
-    const c = document.createElement('canvas');
-    c.width = c.height = SIZE;
-    const ctx = c.getContext('2d', { willReadFrequently: true });
     const sw = media.videoWidth || media.naturalWidth || media.offsetWidth;
     const sh = media.videoHeight || media.naturalHeight || media.offsetHeight;
-    if (sw > SIZE && sh > SIZE) {
-      ctx.drawImage(media, (sw - SIZE) / 2, (sh - SIZE) / 2, SIZE, SIZE, 0, 0, SIZE, SIZE);
-    } else {
-      ctx.drawImage(media, 0, 0, SIZE, SIZE);
-    }
-    const d = ctx.getImageData(0, 0, SIZE, SIZE).data;
+    if (!sw || !sh) return;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    // object-fit: cover → source rect actually visible on screen
+    const scale = Math.max(vw / sw, vh / sh);
+    const visW = vw / scale, visH = vh / scale;
+    const offX = (sw - visW) / 2, offY = (sh - visH) / 2;
+    // Text band: middle 70% of width, from above the clock to below the search bar
+    const bx = offX + visW * 0.15, bw = visW * 0.70;
+    const by = offY + visH * 0.18, bh = visH * 0.62;
+    const W = 96, H = 60;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(media, bx, by, bw, bh, 0, 0, W, H);
+    const d = ctx.getImageData(0, 0, W, H).data;
     let sum = 0, n = 0;
-    for (let i = 0; i < d.length; i += 16) {
+    for (let i = 0; i < d.length; i += 8) {
       sum += 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
       n++;
     }
     const lum = sum / n;
-    document.documentElement.dataset.theme = lum > 145 ? 'light' : 'dark';
+    document.documentElement.dataset.theme = lum > 140 ? 'light' : 'dark';
   } catch {
     // Tainted canvas (video DRM or browser restriction) — keep current theme
   }
