@@ -251,7 +251,27 @@ const TRANSLATIONS = {
     'bml.hint':              'Cliquez sur « Générer » pour créer un bookmarklet.',
 
     // Audit
-    'audit.none':            'Aucune entrée.',
+    'audit.none':                            'Aucune entrée.',
+    'audit.action.login':                    'Connexion',
+    'audit.action.login_sso':               'Connexion SSO',
+    'audit.action.login_failed':            'Échec de connexion',
+    'audit.action.logout':                  'Déconnexion',
+    'audit.action.password_change':         'Mot de passe modifié',
+    'audit.action.totp_enabled':            'TOTP activé',
+    'audit.action.totp_disabled':           'TOTP désactivé',
+    'audit.action.user_created':            'Compte créé',
+    'audit.action.user_created_sso':        'Compte créé (SSO)',
+    'audit.action.user_deleted':            'Compte supprimé',
+    'audit.action.user_suspended':          'Compte suspendu',
+    'audit.action.register_blocked_duplicate_email': 'Inscription bloquée (email déjà utilisé)',
+    'audit.action.registration_requested':  'Demande d\'inscription',
+    'audit.action.registration_completed':  'Inscription finalisée',
+    'audit.action.registration_revoked':    'Demande d\'inscription révoquée',
+    'audit.action.invitation_sent':         'Invitation envoyée',
+    'audit.action.invitation_revoked':      'Invitation révoquée',
+    'audit.action.bookmark_import':         'Import de marque-pages',
+    'audit.action.wallpaper_upload':        'Fond d\'écran ajouté',
+    'audit.action.wallpaper_delete':        'Fond d\'écran supprimé',
 
     // Stat labels
     'stat.bookmarks':        'Marque-pages',
@@ -522,7 +542,27 @@ const TRANSLATIONS = {
     'bml.hint':              'Click "Generate" to create a bookmarklet.',
 
     // Audit
-    'audit.none':            'No entries.',
+    'audit.none':                            'No entries.',
+    'audit.action.login':                    'Login',
+    'audit.action.login_sso':               'SSO login',
+    'audit.action.login_failed':            'Failed login',
+    'audit.action.logout':                  'Logout',
+    'audit.action.password_change':         'Password changed',
+    'audit.action.totp_enabled':            'TOTP enabled',
+    'audit.action.totp_disabled':           'TOTP disabled',
+    'audit.action.user_created':            'Account created',
+    'audit.action.user_created_sso':        'Account created (SSO)',
+    'audit.action.user_deleted':            'Account deleted',
+    'audit.action.user_suspended':          'Account suspended',
+    'audit.action.register_blocked_duplicate_email': 'Registration blocked (email already used)',
+    'audit.action.registration_requested':  'Registration requested',
+    'audit.action.registration_completed':  'Registration completed',
+    'audit.action.registration_revoked':    'Registration revoked',
+    'audit.action.invitation_sent':         'Invitation sent',
+    'audit.action.invitation_revoked':      'Invitation revoked',
+    'audit.action.bookmark_import':         'Bookmark import',
+    'audit.action.wallpaper_upload':        'Wallpaper uploaded',
+    'audit.action.wallpaper_delete':        'Wallpaper deleted',
 
     // Stat labels
     'stat.bookmarks':        'Bookmarks',
@@ -2277,30 +2317,10 @@ function buildAdminUsers() {
   return frag;
 }
 
-const AUDIT_LABELS = {
-  login:                            'Connexion',
-  login_sso:                        'Connexion SSO',
-  login_failed:                     'Échec de connexion',
-  logout:                           'Déconnexion',
-  password_change:                  'Mot de passe modifié',
-  totp_enabled:                     'TOTP activé',
-  totp_disabled:                    'TOTP désactivé',
-  user_created:                     'Compte créé',
-  user_created_sso:                 'Compte créé (SSO)',
-  user_deleted:                     'Compte supprimé',
-  user_suspended:                   'Compte suspendu',
-  register_blocked_duplicate_email: 'Inscription bloquée (email déjà utilisé)',
-  registration_requested:           'Demande d’inscription',
-  registration_completed:           'Inscription finalisée',
-  registration_revoked:             'Demande d’inscription révoquée',
-  invitation_sent:                  'Invitation envoyée',
-  invitation_revoked:               'Invitation révoquée',
-  bookmark_import:                  'Import de marque-pages',
-  wallpaper_upload:                 'Fond d’écran ajouté',
-  wallpaper_delete:                 'Fond d’écran supprimé',
-};
 function auditLabel(action) {
-  return AUDIT_LABELS[action] || action.replace(/_/g, ' ');
+  const key = ‘audit.action.’ + action;
+  const label = t(key);
+  return label !== key ? label : action.replace(/_/g, ‘ ‘);
 }
 
 function buildAdminAudit() {
