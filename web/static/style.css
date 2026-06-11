@@ -34,6 +34,9 @@ html, body {
   --glass-search-focus:  rgba(255,255,255,0.11);
   --glass-search-border:       rgba(255,255,255,0.14);
   --glass-search-border-focus: rgba(255,255,255,0.24);
+  /* Readability over busy wallpapers — invisible as UI, like iOS lock screen */
+  --home-scrim: rgba(0,0,0,0.30);
+  --text-glow:  0 1px 3px rgba(0,0,0,0.40), 0 4px 28px rgba(0,0,0,0.45), 0 0 90px rgba(0,0,0,0.35);
   /* Blur — controllable by user, stored in localStorage */
   --blur-bg:    0px;   /* filter on bg media */
   --blur-panel: 40px;  /* backdrop-filter on overlays/panels */
@@ -64,6 +67,8 @@ html, body {
   --glass-search-focus:  rgba(255,255,255,0.45);
   --glass-search-border:       rgba(10,10,14,0.12);
   --glass-search-border-focus: rgba(10,10,14,0.22);
+  --home-scrim: rgba(255,255,255,0.34);
+  --text-glow:  0 1px 3px rgba(255,255,255,0.50), 0 4px 28px rgba(255,255,255,0.55), 0 0 90px rgba(255,255,255,0.45);
 }
 
 /* Theme switches smoothly when luminance sampling flips it */
@@ -213,6 +218,18 @@ body.searching #date-line {
 /* ── Home ───────────────────────────────────────────── */
 #view-home { flex-direction: column; }
 
+/* Soft radial scrim behind the text zone — keeps clock/search readable on
+   busy wallpapers without drawing a visible box (iOS lock-screen trick). */
+#view-home::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 75% 62% at 50% 50%, var(--home-scrim) 0%, transparent 72%);
+  pointer-events: none;
+  transition: background 0.6s ease;
+}
+#view-home .home-center { position: relative; z-index: 1; }
+
 /* ── Hub (menu bang) — full-page liquid glass ───────── */
 .hub-overlay {
   position: fixed;
@@ -361,7 +378,7 @@ body.searching #date-line {
   font-feature-settings: 'lnum' 1, 'tnum' 1;
   /* Italic slant pushes the visual mass right of the geometric center. */
   transform: translateX(-0.025em);
-  text-shadow: 0 2px 60px rgba(0,0,0,0.30);
+  text-shadow: var(--text-glow);
 }
 
 .date-line {
@@ -372,7 +389,7 @@ body.searching #date-line {
   color: var(--text-dim);
   letter-spacing: 0.22em;
   text-transform: capitalize;
-  text-shadow: 0 1px 30px rgba(0,0,0,0.25);
+  text-shadow: var(--text-glow);
 }
 
 .search-wrap {
