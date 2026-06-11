@@ -199,10 +199,19 @@ func (s *adminService) GetStats(ctx context.Context) (*model.AdminStats, error) 
 	if err != nil {
 		return nil, err
 	}
-	activeCount := 0
+	activeCount, bookmarks, wallpapers, sessions := 0, 0, 0, 0
 	for _, u := range allUsers {
 		if u.IsActive {
 			activeCount++
+		}
+		if n, err := s.repos.Bookmarks.CountByUser(ctx, u.ID); err == nil {
+			bookmarks += n
+		}
+		if n, err := s.repos.Wallpapers.CountByUser(ctx, u.ID); err == nil {
+			wallpapers += n
+		}
+		if ss, err := s.repos.Sessions.ListByUserID(ctx, u.ID); err == nil {
+			sessions += len(ss)
 		}
 	}
 
@@ -212,10 +221,40 @@ func (s *adminService) GetStats(ctx context.Context) (*model.AdminStats, error) 
 		dbSize = info.Size()
 	}
 
+	pendingInv := 0
+	if invs, err := s.repos.Invitations.List(ctx); err == nil {
+		for _, inv := range invs {
+			if inv.IsPending() {
+				pendingInv++
+			}
+		}
+	}
+
+	pendingReg := 0
+	if regs, err := s.repos.PendingRegistrations.List(ctx); err == nil {
+		for _, r := range regs {
+			if !r.IsExpired() {
+				pendingReg++
+			}
+		}
+	}
+
+	auditTotal := 0
+	if _, n, err := s.repos.Audit.List(ctx, 0, 1, repository.AuditFilter{}); err == nil {
+		auditTotal = n
+	}
+
 	stats := &model.AdminStats{
-		TotalUsers:  total,
-		ActiveUsers: activeCount,
-		DBSizeBytes: dbSize,
+		TotalUsers:           total,
+		ActiveUsers:          activeCount,
+		TotalBookmarks:       bookmarks,
+		TotalWallpapers:      wallpapers,
+		DBSizeBytes:          dbSize,
+		MediaBytes:           dirSize(s.cfg.MediaPath),
+		ActiveSessions:       sessions,
+		PendingInvitations:   pendingInv,
+		PendingRegistrations: pendingReg,
+		AuditEntries:         auditTotal,
 	}
 
 	return stats, nil

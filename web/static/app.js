@@ -147,9 +147,14 @@ const TRANSLATIONS = {
     // Admin
     'admin.stat.users':      'Utilisateurs',
     'admin.stat.active':     'Actifs',
+    'admin.stat.sessions':   'Sessions actives',
     'admin.stat.bookmarks':  'Marque-pages',
     'admin.stat.wallpapers': 'Fonds d\'écran',
+    'admin.stat.media':      'Stockage média',
     'admin.stat.db':         'Base de données',
+    'admin.stat.pendinginv': 'Invitations en attente',
+    'admin.stat.pendingreg': 'Demandes en attente',
+    'admin.stat.audit':      'Entrées journal',
     'admin.user.create':     'Créer un utilisateur',
     'admin.user.create.btn': 'Créer',
     'admin.user.temp.password': 'Mot de passe temporaire',
@@ -221,6 +226,8 @@ const TRANSLATIONS = {
     'fx.themeMode.auto':     'Auto',
     'fx.themeMode.dark':     'Sombre',
     'fx.themeMode.light':    'Clair',
+    'fx.menuTheme':          'Thème du menu',
+    'fx.menuTheme.sub':      'Menu et panneaux — auto suit le thème de la page',
     'fx.blur.bg':            'Flou du fond',
     'fx.blur.bg.sub':        'Quantité de flou sur l\'image de fond',
     'fx.blur.panel':         'Flou des panneaux',
@@ -410,9 +417,14 @@ const TRANSLATIONS = {
     // Admin
     'admin.stat.users':      'Users',
     'admin.stat.active':     'Active',
+    'admin.stat.sessions':   'Active sessions',
     'admin.stat.bookmarks':  'Bookmarks',
     'admin.stat.wallpapers': 'Wallpapers',
+    'admin.stat.media':      'Media storage',
     'admin.stat.db':         'Database',
+    'admin.stat.pendinginv': 'Pending invitations',
+    'admin.stat.pendingreg': 'Pending requests',
+    'admin.stat.audit':      'Audit entries',
     'admin.user.create':     'Create user',
     'admin.user.create.btn': 'Create',
     'admin.user.temp.password': 'Temporary password',
@@ -484,6 +496,8 @@ const TRANSLATIONS = {
     'fx.themeMode.auto':     'Auto',
     'fx.themeMode.dark':     'Dark',
     'fx.themeMode.light':    'Light',
+    'fx.menuTheme':          'Menu theme',
+    'fx.menuTheme.sub':      'Menu and panels — auto follows the page theme',
     'fx.blur.bg':            'Background blur',
     'fx.blur.bg.sub':        'Amount of blur applied to the background image',
     'fx.blur.panel':         'Panel blur',
@@ -868,7 +882,13 @@ const BANGS = [
   { bang: '!wp',    label: 'WordPress',        url: 'https://wordpress.org/search/' },
   { bang: '!leo',   label: 'Leo (dict)',        url: 'https://dict.leo.org/englisch-deutsch/' },
   { bang: '!tr',    label: 'DeepL',            url: 'https://www.deepl.com/translator#auto/auto/' },
-  { bang: '!bm',    label: 'Mes marque-pages', url: null }, // handled specially
+  // Internal bangs — handled in handleSearch, never leave the page
+  { bang: '!bm',     label: 'Mes marque-pages', url: null },
+  { bang: '!me',     label: 'Mon compte',       url: null },
+  { bang: '!theme',  label: 'Thème & effets',   url: null },
+  { bang: '!admin',  label: 'Administration',   url: null },
+  { bang: '!stats',  label: 'Statistiques',     url: null },
+  { bang: '!logout', label: 'Déconnexion',      url: null },
 ];
 
 function initSearchSuggestions() {
@@ -898,8 +918,15 @@ function initSearchSuggestions() {
     row.appendChild(el('span', 'sug-url', bang.label));
     row.addEventListener('mousedown', e => {
       e.preventDefault();
-      if (!bang.url) { openHub(); }
-      else if (rest) open(bang.url + encodeURIComponent(rest), '_blank');
+      if (!bang.url) {
+        // Internal bang — route through handleSearch so each one dispatches
+        // to its own action (!bm, !me, !theme, !admin, !logout, menu bang…).
+        input.value = bang.bang;
+        hideSuggestions();
+        $('search-form').requestSubmit();
+        return;
+      }
+      if (rest) open(bang.url + encodeURIComponent(rest), '_blank');
       else { input.value = bang.bang + ' '; hideSuggestions(); input.focus(); return; }
       hideSuggestions();
       input.value = '';
@@ -1019,6 +1046,24 @@ function handleSearch(e) {
       case 'bm': case 'edit':
         openBookmarks();
         $('search-input').value = '';
+        return;
+      // Quick access to each hub tile — geek shortcuts.
+      case 'me': case 'account':
+        openSettings();
+        $('search-input').value = '';
+        return;
+      case 'theme': case 'fx':
+        openTheme();
+        $('search-input').value = '';
+        return;
+      case 'admin':
+        if (S.user && S.user.role === 'admin') { openAdmin(); $('search-input').value = ''; return; }
+        break; // non-admin → fall through to DDG
+      case 'stats':
+        if (S.user && S.user.role === 'admin') { openAdmin(); renderAdminTab('stats'); $('search-input').value = ''; return; }
+        break;
+      case 'logout': case 'bye':
+        logout();
         return;
       case 'g':
         open(`https://www.google.com/search?q=${encodeURIComponent(rest)}`);
@@ -1246,11 +1291,11 @@ function buildEffectsTab() {
     return row;
   }
 
-  function makeThemeModeRow() {
+  function makeThemeModeRow(labelKey, prefKey) {
     const row = el('div', 'effect-row');
     const labelWrap = el('div');
-    labelWrap.appendChild(el('div', 'effect-label', t('fx.themeMode')));
-    labelWrap.appendChild(el('div', 'effect-sub', t('fx.themeMode.sub')));
+    labelWrap.appendChild(el('div', 'effect-label', t(labelKey)));
+    labelWrap.appendChild(el('div', 'effect-sub', t(labelKey + '.sub')));
     row.appendChild(labelWrap);
 
     const seg = el('div', 'segmented');
@@ -1259,7 +1304,7 @@ function buildEffectsTab() {
       ['dark',  t('fx.themeMode.dark')],
       ['light', t('fx.themeMode.light')],
     ];
-    const current = prefs.themeMode === 'dark' || prefs.themeMode === 'light' ? prefs.themeMode : 'auto';
+    const current = prefs[prefKey] === 'dark' || prefs[prefKey] === 'light' ? prefs[prefKey] : 'auto';
     for (const [mode, label] of modes) {
       const btn = el('button', mode === current ? 'active' : '', label);
       btn.type = 'button';
@@ -1267,7 +1312,7 @@ function buildEffectsTab() {
         seg.querySelectorAll('button').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         const newPrefs = loadThemePrefs();
-        newPrefs.themeMode = mode;
+        newPrefs[prefKey] = mode;
         saveThemePrefs(newPrefs);
         applyThemePrefs(newPrefs);
       };
@@ -1277,7 +1322,8 @@ function buildEffectsTab() {
     return row;
   }
 
-  sec.appendChild(makeThemeModeRow());
+  sec.appendChild(makeThemeModeRow('fx.themeMode', 'themeMode'));
+  sec.appendChild(makeThemeModeRow('fx.menuTheme', 'menuThemeMode'));
   sec.appendChild(makeSliderRow(t('fx.blur.bg'), t('fx.blur.bg.sub'), 'blurBg', 0, 40, 'px', 0));
   sec.appendChild(makeSliderRow(t('fx.blur.panel'), t('fx.blur.panel.sub'), 'blurPanel', 10, 60, 'px', 40));
   sec.appendChild(makeSliderRow(t('fx.blur.focus'), t('fx.blur.focus.sub'), 'blurFocus', 0, 30, 'px', 14));
@@ -1308,6 +1354,25 @@ function applyThemePrefs(p) {
   if (dust) dust.style.display = (p.dust === true) ? '' : 'none'; // opt-in
 
   resampleTheme();
+  applyMenuTheme();
+}
+
+// The hub and its panels can follow their own theme, independent of the
+// home page: auto = inherit the wallpaper-driven root theme; dark/light =
+// forced via data-theme on the overlay elements (CSS vars re-cascade there).
+const MENU_SURFACES = [
+  'hub-overlay', 'overlay-bookmarks', 'overlay-settings', 'overlay-theme',
+  'overlay-admin', 'modal-bookmark', 'modal-new-user',
+];
+function applyMenuTheme() {
+  const m = loadThemePrefs().menuThemeMode;
+  const forced = m === 'dark' || m === 'light' ? m : null;
+  for (const id of MENU_SURFACES) {
+    const e = $(id);
+    if (!e) continue;
+    if (forced) e.dataset.theme = forced;
+    else delete e.dataset.theme;
+  }
 }
 
 async function loadBookmarks() {
@@ -2046,9 +2111,14 @@ function buildAdminStats() {
     const stats = [
       { v: s.total_users,      l: t('admin.stat.users') },
       { v: s.active_users,     l: t('admin.stat.active') },
+      { v: s.active_sessions,  l: t('admin.stat.sessions') },
       { v: s.total_bookmarks,  l: t('admin.stat.bookmarks') },
       { v: s.total_wallpapers, l: t('admin.stat.wallpapers') },
+      { v: fmtBytes(s.media_bytes),   l: t('admin.stat.media') },
       { v: fmtBytes(s.db_size_bytes), l: t('admin.stat.db') },
+      { v: s.pending_invitations,   l: t('admin.stat.pendinginv') },
+      { v: s.pending_registrations, l: t('admin.stat.pendingreg') },
+      { v: s.audit_entries,    l: t('admin.stat.audit') },
     ];
     for (const { v, l } of stats) {
       const card = el('div', 'stat-card');

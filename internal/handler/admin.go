@@ -278,10 +278,15 @@ func (h *Handler) AdminGetStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"total_users":      stats.TotalUsers,
-		"active_users":     stats.ActiveUsers,
-		"total_bookmarks":  stats.TotalBookmarks,
-		"total_wallpapers": stats.TotalWallpapers,
-		"db_size_bytes":    stats.DBSizeBytes,
+		"total_users":           stats.TotalUsers,
+		"active_users":          stats.ActiveUsers,
+		"total_bookmarks":       stats.TotalBookmarks,
+		"total_wallpapers":      stats.TotalWallpapers,
+		"db_size_bytes":         stats.DBSizeBytes,
+		"media_bytes":           stats.MediaBytes,
+		"active_sessions":       stats.ActiveSessions,
+		"pending_invitations":   stats.PendingInvitations,
+		"pending_registrations": stats.PendingRegistrations,
+		"audit_entries":         stats.AuditEntries,
 	})
 }

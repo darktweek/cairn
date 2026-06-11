@@ -46,6 +46,39 @@ html, body {
   --blur-focus: 14px;  /* backdrop-filter on hub/search overlay */
 }
 
+/* Explicit dark values — lets an element (e.g. the hub when menu theme is
+   forced dark) override a light root, since :root defaults can't be re-applied
+   from an attribute selector. Mirror of the :root values above. */
+[data-theme="dark"] {
+  --text:        rgba(255,255,255,0.95);
+  --text-dim:    rgba(255,255,255,0.60);
+  --text-dimmer: rgba(255,255,255,0.32);
+  --panel-bg:    rgba(8,8,12,0.88);
+  --border:      rgba(255,255,255,0.12);
+  --input-bg:    rgba(255,255,255,0.07);
+  --input-focus: rgba(255,255,255,0.13);
+  --btn-bg:      rgba(255,255,255,0.08);
+  --btn-hover:   rgba(255,255,255,0.15);
+  --row-hover:   rgba(255,255,255,0.06);
+  --accent:      rgba(255,255,255,0.92);
+  --accent-fg:   rgba(8,8,12,0.95);
+  --danger:      rgba(255,80,80,0.85);
+  --success:     rgba(80,200,120,0.85);
+  --glass-bg:    rgba(22,22,30,0.72);
+  --glass-panel: rgba(16,16,22,0.68);
+  --glass-tile:  rgba(255,255,255,0.06);
+  --glass-shine: rgba(255,255,255,0.14);
+  --glass-shadow: rgba(0,0,0,0.50);
+  --glass-search:        rgba(255,255,255,0.07);
+  --glass-search-focus:  rgba(255,255,255,0.11);
+  --glass-search-border:       rgba(255,255,255,0.14);
+  --glass-search-border-focus: rgba(255,255,255,0.24);
+  --home-scrim: rgba(0,0,0,0.30);
+  --text-glow:  0 1px 3px rgba(0,0,0,0.40), 0 4px 28px rgba(0,0,0,0.45), 0 0 90px rgba(0,0,0,0.35);
+  --overlay-veil: rgba(0,0,0,0.45);
+  --focus-veil:   rgba(0,0,0,0.38);
+}
+
 [data-theme="light"] {
   --text:        rgba(10,10,14,0.92);
   --text-dim:    rgba(10,10,14,0.58);
@@ -305,6 +338,7 @@ body.searching #date-line {
 }
 
 .hub-tile {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -350,6 +384,17 @@ body.searching #date-line {
   color: var(--text-dimmer);
   letter-spacing: 0.02em;
 }
+/* Bang shortcut hint — discreet, reveals itself on hover */
+.hub-tile-bang {
+  position: absolute;
+  top: 0.7rem; right: 0.85rem;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.68rem;
+  color: var(--text-dimmer);
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.hub-tile:hover .hub-tile-bang { opacity: 1; }
 .hub-tile-danger:hover {
   border-color: var(--danger);
 }

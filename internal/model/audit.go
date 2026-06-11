@@ -13,9 +13,14 @@ type AuditEntry struct {
 }
 
 type AdminStats struct {
-	TotalUsers      int
-	ActiveUsers     int
-	TotalBookmarks  int
-	TotalWallpapers int
-	DBSizeBytes     int64
+	TotalUsers           int
+	ActiveUsers          int
+	TotalBookmarks       int
+	TotalWallpapers      int
+	DBSizeBytes          int64
+	MediaBytes           int64 // total size of all user media on disk
+	ActiveSessions       int
+	PendingInvitations   int
+	PendingRegistrations int
+	AuditEntries         int
 }
