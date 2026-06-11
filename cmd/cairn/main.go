@@ -141,8 +141,10 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 	})
 
 	// Rate limit configs.
+	// 10/5min: forgiving for a human who fumbles a password, still useless
+	// for brute force (Argon2id makes each attempt expensive anyway).
 	loginRL := middleware.RateLimit(
-		middleware.RateLimitConfig{Max: 5, Window: 15 * time.Minute},
+		middleware.RateLimitConfig{Max: 10, Window: 5 * time.Minute},
 		cfg.TrustedProxy,
 	)
 	registerRL := middleware.RateLimit(

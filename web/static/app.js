@@ -228,6 +228,7 @@ const TRANSLATIONS = {
     'fx.themeMode.light':    'Clair',
     'fx.menuTheme':          'Thème du menu',
     'fx.menuTheme.sub':      'Menu et panneaux — auto suit le thème de la page',
+    'login.ratelimited':     'Trop de tentatives — réessaie dans quelques minutes',
     'fx.blur.bg':            'Flou du fond',
     'fx.blur.bg.sub':        'Quantité de flou sur l\'image de fond',
     'fx.blur.panel':         'Flou des panneaux',
@@ -498,6 +499,7 @@ const TRANSLATIONS = {
     'fx.themeMode.light':    'Light',
     'fx.menuTheme':          'Menu theme',
     'fx.menuTheme.sub':      'Menu and panels — auto follows the page theme',
+    'login.ratelimited':     'Too many attempts — try again in a few minutes',
     'fx.blur.bg':            'Background blur',
     'fx.blur.bg.sub':        'Amount of blur applied to the background image',
     'fx.blur.panel':         'Panel blur',
@@ -1111,13 +1113,19 @@ function backToHub(panelId) {
 }
 
 /* ─── Login ──────────────────────────────────────────────────────────────── */
+let _loginInFlight = false;
+
 async function handleLogin(e) {
   e.preventDefault();
+  if (_loginInFlight) return; // rapid resubmits would burn the rate limit
   setError('login-error', '');
   const email    = $('login-email').value.trim();
   const password = $('login-password').value;
   const totpCode = $('login-totp').value.trim();
 
+  const btn = e.target.querySelector('button[type="submit"]');
+  _loginInFlight = true;
+  if (btn) btn.disabled = true;
   try {
     await POST('/auth/login', { email, password, totp_code: totpCode || undefined });
     await boot();
@@ -1126,9 +1134,14 @@ async function handleLogin(e) {
       show('totp-group');
       $('login-totp').focus();
       setError('login-error', 'Code TOTP requis');
+    } else if (err.status === 429) {
+      setError('login-error', t('login.ratelimited'));
     } else {
       setError('login-error', err.message);
     }
+  } finally {
+    _loginInFlight = false;
+    if (btn) btn.disabled = false;
   }
 }
 
