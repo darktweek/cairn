@@ -2318,9 +2318,9 @@ function buildAdminUsers() {
 }
 
 function auditLabel(action) {
-  const key = ‘audit.action.’ + action;
+  const key = 'audit.action.' + action;
   const label = t(key);
-  return label !== key ? label : action.replace(/_/g, ‘ ‘);
+  return label !== key ? label : action.replace(/_/g, ' ');
 }
 
 function buildAdminAudit() {
