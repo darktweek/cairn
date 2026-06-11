@@ -216,6 +216,11 @@ const TRANSLATIONS = {
     'wp.delete.confirm':     'Supprimer ce fond d\'écran ?',
 
     // Effects
+    'fx.themeMode':          'Thème de texte',
+    'fx.themeMode.sub':      'Auto : s\'adapte à la luminosité du fond d\'écran',
+    'fx.themeMode.auto':     'Auto',
+    'fx.themeMode.dark':     'Sombre',
+    'fx.themeMode.light':    'Clair',
     'fx.blur.bg':            'Flou du fond',
     'fx.blur.bg.sub':        'Quantité de flou sur l\'image de fond',
     'fx.blur.panel':         'Flou des panneaux',
@@ -474,6 +479,11 @@ const TRANSLATIONS = {
     'wp.delete.confirm':     'Delete this wallpaper?',
 
     // Effects
+    'fx.themeMode':          'Text theme',
+    'fx.themeMode.sub':      'Auto: adapts to wallpaper brightness',
+    'fx.themeMode.auto':     'Auto',
+    'fx.themeMode.dark':     'Dark',
+    'fx.themeMode.light':    'Light',
     'fx.blur.bg':            'Background blur',
     'fx.blur.bg.sub':        'Amount of blur applied to the background image',
     'fx.blur.panel':         'Panel blur',
@@ -746,8 +756,26 @@ async function loadWallpaper() {
 }
 
 let _lumInterval = null;
+let _bgMedia = null; // current background element, for re-sampling on theme-mode change
+
+function themeMode() {
+  const m = loadThemePrefs().themeMode;
+  return m === 'dark' || m === 'light' ? m : 'auto';
+}
+
+function resampleTheme() {
+  const mode = themeMode();
+  if (mode !== 'auto') {
+    document.documentElement.dataset.theme = mode;
+    return;
+  }
+  if (_bgMedia) sampleLuminance(_bgMedia);
+  else document.documentElement.dataset.theme = 'dark'; // gradient fallback is dark
+}
 
 function sampleLuminance(media) {
+  _bgMedia = media;
+  if (themeMode() !== 'auto') return;
   // Sample a center crop — that's where the clock and search sit, so the
   // theme follows what the text actually overlaps (cf. go-startpage).
   // Some browsers taint the canvas even for same-origin video — wrap carefully.
@@ -1202,6 +1230,38 @@ function buildEffectsTab() {
     return row;
   }
 
+  function makeThemeModeRow() {
+    const row = el('div', 'effect-row');
+    const labelWrap = el('div');
+    labelWrap.appendChild(el('div', 'effect-label', t('fx.themeMode')));
+    labelWrap.appendChild(el('div', 'effect-sub', t('fx.themeMode.sub')));
+    row.appendChild(labelWrap);
+
+    const seg = el('div', 'segmented');
+    const modes = [
+      ['auto',  t('fx.themeMode.auto')],
+      ['dark',  t('fx.themeMode.dark')],
+      ['light', t('fx.themeMode.light')],
+    ];
+    const current = prefs.themeMode === 'dark' || prefs.themeMode === 'light' ? prefs.themeMode : 'auto';
+    for (const [mode, label] of modes) {
+      const btn = el('button', mode === current ? 'active' : '', label);
+      btn.type = 'button';
+      btn.onclick = () => {
+        seg.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const newPrefs = loadThemePrefs();
+        newPrefs.themeMode = mode;
+        saveThemePrefs(newPrefs);
+        applyThemePrefs(newPrefs);
+      };
+      seg.appendChild(btn);
+    }
+    row.appendChild(seg);
+    return row;
+  }
+
+  sec.appendChild(makeThemeModeRow());
   sec.appendChild(makeSliderRow(t('fx.blur.bg'), t('fx.blur.bg.sub'), 'blurBg', 0, 40, 'px', 0));
   sec.appendChild(makeSliderRow(t('fx.blur.panel'), t('fx.blur.panel.sub'), 'blurPanel', 10, 60, 'px', 40));
   sec.appendChild(makeSliderRow(t('fx.blur.focus'), t('fx.blur.focus.sub'), 'blurFocus', 0, 30, 'px', 14));
@@ -1230,6 +1290,8 @@ function applyThemePrefs(p) {
   if (canvas) canvas.style.display = (p.rain === false) ? 'none' : '';
   const dust = $('dust-canvas');
   if (dust) dust.style.display = (p.dust === true) ? '' : 'none'; // opt-in
+
+  resampleTheme();
 }
 
 async function loadBookmarks() {

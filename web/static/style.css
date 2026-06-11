@@ -30,6 +30,10 @@ html, body {
   --glass-tile:  rgba(255,255,255,0.06);
   --glass-shine: rgba(255,255,255,0.14);
   --glass-shadow: rgba(0,0,0,0.50);
+  --glass-search:        rgba(255,255,255,0.07);
+  --glass-search-focus:  rgba(255,255,255,0.11);
+  --glass-search-border:       rgba(255,255,255,0.14);
+  --glass-search-border-focus: rgba(255,255,255,0.24);
   /* Blur — controllable by user, stored in localStorage */
   --blur-bg:    0px;   /* filter on bg media */
   --blur-panel: 40px;  /* backdrop-filter on overlays/panels */
@@ -56,6 +60,17 @@ html, body {
   --glass-tile:  rgba(10,10,14,0.05);
   --glass-shine: rgba(255,255,255,0.65);
   --glass-shadow: rgba(0,0,0,0.18);
+  --glass-search:        rgba(255,255,255,0.30);
+  --glass-search-focus:  rgba(255,255,255,0.45);
+  --glass-search-border:       rgba(10,10,14,0.12);
+  --glass-search-border-focus: rgba(10,10,14,0.22);
+}
+
+/* Theme switches smoothly when luminance sampling flips it */
+body, .clock, .date-line, .search-form, .search-input {
+  transition-property: color, background-color, border-color;
+  transition-duration: 0.6s;
+  transition-timing-function: ease;
 }
 
 /* ── Background layers ──────────────────────────────── */
@@ -328,33 +343,41 @@ body.searching #date-line {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.2rem;
+  gap: 0.65rem;
   user-select: none;
 }
 
 .clock {
   font-family: 'Cormorant Garant', Georgia, serif;
-  font-size: clamp(5rem, 16vw, 11rem);
+  font-size: clamp(5rem, 15vw, 10rem);
   font-weight: 300;
   font-style: italic;
   color: var(--text);
-  line-height: 0.9;
-  letter-spacing: -0.01em;
-  text-shadow: 0 2px 40px rgba(0,0,0,0.25);
+  line-height: 1;
+  letter-spacing: 0.01em;
+  /* Cormorant defaults to oldstyle figures — digits dance up and down.
+     Lining + tabular keeps them on one even baseline. */
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: 'lnum' 1, 'tnum' 1;
+  /* Italic slant pushes the visual mass right of the geometric center. */
+  transform: translateX(-0.025em);
+  text-shadow: 0 2px 60px rgba(0,0,0,0.30);
 }
 
 .date-line {
   font-family: 'Cormorant Garant', Georgia, serif;
-  font-size: clamp(0.85rem, 1.8vw, 1.15rem);
+  font-size: clamp(0.85rem, 1.7vw, 1.05rem);
   font-weight: 300;
+  font-style: italic;
   color: var(--text-dim);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.22em;
   text-transform: capitalize;
+  text-shadow: 0 1px 30px rgba(0,0,0,0.25);
 }
 
 .search-wrap {
-  margin-top: 2.75rem;
-  width: min(620px, 88vw);
+  margin-top: 3.5rem;
+  width: min(580px, 88vw);
   position: relative;
 }
 
@@ -362,29 +385,36 @@ body.searching #date-line {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  background: var(--glass-bg);
-  border: 1px solid var(--border);
+  background: var(--glass-search, rgba(255,255,255,0.07));
+  border: 1px solid var(--glass-search-border, rgba(255,255,255,0.14));
   border-radius: 2rem;
-  padding: 0.55rem 1.1rem;
+  padding: 0.65rem 1.3rem;
   position: relative;
   overflow: hidden;
-  backdrop-filter: blur(var(--blur-panel)) saturate(1.4);
-  -webkit-backdrop-filter: blur(var(--blur-panel)) saturate(1.4);
-  box-shadow: inset 0 1px 0 var(--glass-shine), 0 4px 20px var(--glass-shadow);
-  transition: background 0.3s, border-color 0.3s, box-shadow 0.3s;
+  backdrop-filter: blur(var(--blur-panel)) saturate(1.6);
+  -webkit-backdrop-filter: blur(var(--blur-panel)) saturate(1.6);
+  box-shadow:
+    inset 0 1px 0 var(--glass-shine),
+    inset 0 -1px 0 rgba(255,255,255,0.04),
+    0 10px 36px var(--glass-shadow);
+  transition: background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease, transform 0.35s ease;
 }
 .search-form::before {
   content: '';
   position: absolute; inset: 0; border-radius: inherit;
-  background: linear-gradient(145deg, rgba(255,255,255,.12) 0%, rgba(255,255,255,.03) 45%, rgba(255,255,255,.00) 65%, rgba(255,255,255,.05) 100%);
+  background: linear-gradient(165deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.02) 38%, rgba(255,255,255,.00) 62%, rgba(255,255,255,.05) 100%);
   pointer-events: none;
 }
 .search-form > * { position: relative; z-index: 1; }
 
 .search-form:focus-within {
-  background: rgba(255,255,255,0.12);
-  border-color: rgba(255,255,255,0.22);
-  box-shadow: inset 0 1px 0 var(--glass-shine), 0 8px 32px var(--glass-shadow);
+  background: var(--glass-search-focus, rgba(255,255,255,0.11));
+  border-color: var(--glass-search-border-focus, rgba(255,255,255,0.24));
+  box-shadow:
+    inset 0 1px 0 var(--glass-shine),
+    inset 0 -1px 0 rgba(255,255,255,0.05),
+    0 16px 48px var(--glass-shadow);
+  transform: translateY(-1px);
 }
 
 .search-input {
@@ -1062,6 +1092,31 @@ body.searching #date-line {
   color: var(--text-dimmer);
   width: 2.5rem;
   text-align: right;
+}
+
+/* ── Segmented control (theme mode) ─────────────────── */
+.segmented {
+  display: inline-flex;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  padding: 2px;
+  gap: 2px;
+}
+.segmented button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  padding: 0.32rem 0.75rem;
+  border-radius: 0.45rem;
+  transition: background 0.2s, color 0.2s;
+}
+.segmented button:hover { color: var(--text); }
+.segmented button.active {
+  background: var(--accent);
+  color: var(--accent-fg);
 }
 .toggle-switch {
   position: relative;
