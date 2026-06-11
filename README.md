@@ -1,194 +1,210 @@
 # Cairn
 
-Start page personnelle, self-hosted, multi-utilisateur.  
-Horloge, pluie, fond d'écran, moteur de recherche configurable, marque-pages.
+A self-hosted personal start page — new-tab replacement for your browser.  
+Clock, ambient effects, wallpapers, configurable search, bookmarks, multi-user with admin panel.
+
+> **No cloud. No tracking. Runs entirely on your own machine or server.**
 
 ---
 
-## Aperçu
+## What it looks like
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                                                     │
-│              [fond d'écran ou vidéo]                │
-│              [animation pluie canvas]               │
-│                                                     │
-│                    12:34                            │
-│           Lundi 09 juin 2026 · S23                  │
-│                                                     │
-│           [ barre de recherche ]                    │
-│                                                     │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                                                              │
+│              [ wallpaper or video background ]               │
+│              [ rain / dust canvas effect ]                   │
+│                                                              │
+│                        12:34                                 │
+│               Tuesday 10 June 2026 · W24                    │
+│                                                              │
+│                 [ search bar ]                               │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-Tapez `!bm` dans la barre de recherche pour ouvrir le gestionnaire de marque-pages.
+Type `!bm` in the search bar to open the bookmark manager.  
+Type `!menu` (or your configured bang) for the full-screen hub.
 
 ---
 
-## Fonctionnalités
+## Features
 
-- **Horloge** — grande, italique, Cormorant Garant
-- **Date** avec numéro de semaine ISO
-- **Fond d'écran** — images et vidéos, sélection aléatoire, épinglage, thème clair/sombre adaptatif par analyse de luminance
-- **Pluie** — animation canvas en fond
-- **Recherche** — DuckDuckGo par défaut, moteur configurable par utilisateur (Google, Brave, Bing, Kagi, custom)
-- **Bangs** — `!bm`/`!edit` (marque-pages), `!g`, `!yt`, `!gh`, `!hub`, + tous les bangs DDG
-- **Marque-pages** — dossiers, tags, import/export Netscape (Chrome/Firefox/Safari/Edge), bookmarklet mobile
-- **TOTP** — optionnel, RFC 6238, compatible toutes apps authenticator
-- **Multi-utilisateur** — le premier compte créé devient admin automatiquement
-- **Panel admin** — stats, gestion des comptes, journal d'audit
-
----
-
-## Stack
-
-| Composant | Choix |
+| Feature | Details |
 |---|---|
-| Langage | Go 1.23 |
-| Router | chi v5 |
-| Base de données | SQLite WAL |
-| Driver SQLite | modernc.org/sqlite (pure Go, zéro CGO) |
-| Image Docker | `scratch` (~5 MB) |
-| Frontend | Vanilla JS, zéro dépendance |
+| **Clock & date** | Large italic clock, ISO week number |
+| **Wallpapers** | Images & videos, pin favorite, random rotation, adaptive light/dark theme via luminance sampling |
+| **Ambient effects** | Rain and dust canvas animations (opt-in per-user) |
+| **Search** | DuckDuckGo by default — Google, Brave, Bing, Kagi, or custom URL |
+| **Bangs** | `!bm` bookmarks, `!g` Google, `!yt` YouTube, `!gh` GitHub, `!hub` full menu, + all DDG bangs |
+| **Bookmarks** | Folders, tags, import/export Netscape format (Chrome/Firefox/Safari/Edge), mobile bookmarklet |
+| **TOTP / 2FA** | Optional, RFC 6238, works with any authenticator app |
+| **Multi-user** | First account created becomes admin automatically |
+| **Invitations** | Admin sends invite links; open registration toggle |
+| **SSO / OIDC** | OpenID Connect (Authentik, Keycloak, Authelia, Google…) — JIT account provisioning |
+| **Admin panel** | User management, storage quotas, upload limits, audit log, pending registrations |
+| **Email** | Account setup emails, SMTP configurable via env or admin UI |
 
 ---
 
-## Démarrage rapide
+## Requirements
 
-### Prérequis
+- **Docker** and **Docker Compose** — that's it.  
+  Go does not need to be installed on your machine; everything builds inside Docker.
 
-- Docker + Docker Compose
+---
 
-### 1. Cloner le dépôt
+## Quick start (5 minutes)
+
+### Step 1 — Clone the repo
 
 ```bash
 git clone https://github.com/darktweek/cairn.git
 cd cairn
 ```
 
-### 2. Créer le fichier `.env`
+### Step 2 — Create your `.env` file
 
 ```bash
 cp .env.example .env
 ```
 
-Éditez `.env` et renseignez les trois variables obligatoires :
+Open `.env` and fill in the required values:
 
 ```bash
-CAIRN_SESSION_SECRET=      # générer : openssl rand -base64 32
-CAIRN_SMTP_USER=           # adresse email SMTP
-CAIRN_SMTP_PASS=           # mot de passe SMTP
+# Generate a random secret:  openssl rand -base64 32
+CAIRN_SESSION_SECRET=your-random-secret-here
+
+# SMTP credentials (needed to send invitation/setup emails)
+CAIRN_SMTP_USER=you@example.com
+CAIRN_SMTP_PASS=your-smtp-password
 ```
 
-### 3. Adapter `compose.yaml`
+> **No SMTP?** You can skip SMTP for a first test — just know that invitation emails won't send.  
+> Set `CAIRN_SMTP_HOST` to a dummy value and create users manually via the admin panel.
 
-Remplacez les valeurs suivantes dans `compose.yaml` selon votre environnement :
+### Step 3 — Edit `compose.yaml`
+
+Open `compose.yaml` and update these three lines to match your setup:
 
 ```yaml
-CAIRN_BASE_URL:  "https://go.example.com"   # votre URL publique
+CAIRN_BASE_URL:  "http://localhost:8080"   # or your public URL if self-hosting
 CAIRN_SMTP_HOST: "smtp.example.com"
 CAIRN_SMTP_FROM: "cairn@example.com"
 ```
 
-### 4. Démarrer
+For local testing, `http://localhost:8080` is fine.
+
+### Step 4 — Start
 
 ```bash
 docker compose up -d
 ```
 
-L'application est disponible sur `http://localhost:8080`.
+The first run downloads the Go builder image and compiles the binary (~2 minutes on first run, instant after).
 
-### 5. Premier utilisateur
+### Step 5 — Open in your browser
 
-Rendez-vous sur `http://localhost:8080` et créez un compte via **Se connecter**.  
-**Le premier compte créé obtient automatiquement le rôle admin.**
+Go to [http://localhost:8080](http://localhost:8080) and click **Sign in**.  
+**The very first account created automatically becomes admin.**
+
+That's it — you're running Cairn.
 
 ---
 
-## Configuration complète
+## Set it as your new-tab page
 
-Toute la configuration se fait via variables d'environnement.  
-Les valeurs sensibles vont dans `.env` (gitignored).
+### Chrome / Edge / Brave
+Install the [New Tab Redirect](https://chrome.google.com/webstore/detail/new-tab-redirect/icpgjfneehieebagbmdbhnlpiopdcmna) extension and point it to `http://localhost:8080`.
 
-| Variable | Défaut | Requis | Description |
+### Firefox
+Use [New Tab Homepage](https://addons.mozilla.org/en-US/firefox/addon/new-tab-homepage/) or set it in `about:preferences` under Home.
+
+### Safari
+Settings → General → New tabs open with → Homepage → set your URL.
+
+---
+
+## Configuration reference
+
+All configuration is via environment variables.  
+Sensitive values go in `.env` (already gitignored).
+
+### Core
+
+| Variable | Default | Required | Description |
 |---|---|---|---|
-| `CAIRN_ADDR` | `:8080` | non | Adresse d'écoute |
-| `CAIRN_ENV` | `production` | non | `production` ou `development` |
-| `CAIRN_BASE_URL` | — | **oui** | URL publique, ex: `https://go.example.com` |
-| `CAIRN_DB_PATH` | `/data/db.sqlite` | non | Chemin de la base SQLite |
-| `CAIRN_MEDIA_PATH` | `/data/media` | non | Répertoire des fonds d'écran |
-| `CAIRN_SESSION_SECRET` | — | **oui** | Clé HMAC, minimum 32 caractères |
-| `CAIRN_DEFAULT_WALLPAPER_LIMIT` | `10` | non | Limite de fonds d'écran par utilisateur |
-| `CAIRN_MAX_UPLOAD_SIZE` | `52428800` | non | Taille max upload en octets (50 MB) |
-| `CAIRN_BOOKMARKLET_TOKEN_LIFETIME` | `90` | non | Durée de vie du token bookmarklet (jours) |
-| `CAIRN_TOTP_ISSUER` | `Cairn` | non | Nom affiché dans l'app authenticator |
-| `CAIRN_TRUSTED_PROXY` | `true` | non | Lire `CF-Connecting-IP` / `X-Forwarded-For` |
-| `CAIRN_MENU_BANG` | — | non | Bang du menu plein écran. Vide = éditable dans l'admin (défaut `!menu`) |
-| `CAIRN_OIDC_ISSUER` | — | non | URL issuer OIDC. Si défini, verrouille la config SSO (sinon éditable en admin) |
-| `CAIRN_OIDC_CLIENT_ID` | — | non | Client ID OIDC |
-| `CAIRN_OIDC_CLIENT_SECRET` | — | non | Client Secret OIDC (mettre dans `.env`) |
-| `CAIRN_OIDC_PROVIDER_NAME` | `SSO` | non | Nom affiché sur le bouton « Se connecter avec … » |
-| `CAIRN_OIDC_SCOPES` | `openid profile email` | non | Scopes demandés |
-| `CAIRN_SMTP_HOST` | — | **oui** | Serveur SMTP |
-| `CAIRN_SMTP_PORT` | `587` | non | Port SMTP |
-| `CAIRN_SMTP_USER` | — | **oui** | Utilisateur SMTP |
-| `CAIRN_SMTP_PASS` | — | **oui** | Mot de passe SMTP |
-| `CAIRN_SMTP_FROM` | — | **oui** | Adresse expéditeur |
-| `CAIRN_SMTP_TLS` | `true` | non | STARTTLS activé |
+| `CAIRN_ADDR` | `:8080` | no | Listen address |
+| `CAIRN_ENV` | `production` | no | `production` or `development` |
+| `CAIRN_BASE_URL` | — | **yes** | Your public URL, e.g. `https://start.example.com` |
+| `CAIRN_DB_PATH` | `/data/db.sqlite` | no | SQLite database path |
+| `CAIRN_MEDIA_PATH` | `/data/media` | no | Wallpaper storage directory |
+| `CAIRN_SESSION_SECRET` | — | **yes** | HMAC key, minimum 32 characters |
 
----
+### Uploads & storage
 
-## Menu
+| Variable | Default | Description |
+|---|---|---|
+| `CAIRN_DEFAULT_WALLPAPER_LIMIT` | `10` | Max wallpapers per user |
+| `CAIRN_MAX_UPLOAD_SIZE` | `52428800` | Max single file size in bytes (50 MB) |
+| `CAIRN_STORAGE_QUOTA` | `209715200` | Max total media per user in bytes (200 MB) |
 
-Cairn n'a pas de barre de navigation. Le menu s'ouvre en tapant un **bang** dans
-la barre de recherche (défaut `!menu`) : il morph en hub plein écran avec des
-tuiles (Marque-pages, Compte, Administration, Déconnexion).
+Per-user overrides for both limits are available in the admin panel.
 
-Le bang est configurable : via `CAIRN_MENU_BANG` (verrouillé) ou depuis
-**Admin → Réglages → Menu**.
+### SMTP (email)
 
----
+| Variable | Default | Required | Description |
+|---|---|---|---|
+| `CAIRN_SMTP_HOST` | — | **yes** | SMTP server hostname |
+| `CAIRN_SMTP_PORT` | `587` | no | SMTP port |
+| `CAIRN_SMTP_USER` | — | **yes** | SMTP username |
+| `CAIRN_SMTP_PASS` | — | **yes** | SMTP password |
+| `CAIRN_SMTP_FROM` | — | **yes** | Sender address |
+| `CAIRN_SMTP_TLS` | `true` | no | Enable STARTTLS |
 
-## SSO (OpenID Connect)
+SMTP can also be configured entirely from the admin UI if not set via environment.
 
-Cairn s'intègre à n'importe quel fournisseur OIDC standard (Authentik, Keycloak,
-Authelia, Google…) via le flux Authorization Code + PKCE, sans dépendance externe.
+### SSO / OpenID Connect (optional)
 
-Quand un provider est configuré, la page de connexion affiche un bouton
-**« Se connecter avec <nom du provider> »** au-dessus du formulaire classique.
-Les comptes sont provisionnés à la volée (JIT) au premier login, liés par email.
-Si aucun provider n'est configuré : email + mot de passe + TOTP (MFA optionnel).
+| Variable | Default | Description |
+|---|---|---|
+| `CAIRN_OIDC_ISSUER` | — | OIDC issuer URL. If set, locks SSO config (otherwise editable in admin) |
+| `CAIRN_OIDC_CLIENT_ID` | — | OIDC client ID |
+| `CAIRN_OIDC_CLIENT_SECRET` | — | OIDC client secret (put in `.env`) |
+| `CAIRN_OIDC_PROVIDER_NAME` | `SSO` | Label shown on the "Sign in with …" button |
+| `CAIRN_OIDC_SCOPES` | `openid profile email` | Requested scopes |
 
-**Configuration** — deux options :
-
-1. **Via le compose** (`CAIRN_OIDC_*`) — verrouille la config.
-2. **Via l'admin** — **Admin → Réglages → SSO** si rien n'est défini dans le compose.
-
-**Redirect URI** à déclarer côté provider :
-
+**Redirect URI to register with your provider:**
 ```
 <CAIRN_BASE_URL>/api/auth/sso/callback
 ```
 
-Exemple pour Authentik : issuer `https://auth.example.com/application/o/<slug>/`.
+### Misc
+
+| Variable | Default | Description |
+|---|---|---|
+| `CAIRN_TRUSTED_PROXY` | `true` | Read real IP from `CF-Connecting-IP` / `X-Forwarded-For` |
+| `CAIRN_MENU_BANG` | — | Bang that opens the full-screen menu (default `!menu`, editable in admin if not set here) |
+| `CAIRN_TOTP_ISSUER` | `Cairn` | Name shown in your authenticator app |
+| `CAIRN_BOOKMARKLET_TOKEN_LIFETIME` | `90` | Bookmarklet token lifetime in days |
 
 ---
 
-## Derrière un reverse proxy
+## Behind a reverse proxy
 
 ### Traefik + Cloudflare Tunnel
 
-`compose.yaml` inclut les labels Traefik prêts à l'emploi. Adaptez `Host(...)` à votre domaine :
+`compose.yaml` includes Traefik labels ready to use. Update `Host(...)` to your domain:
 
 ```yaml
 labels:
   traefik.enable: "true"
-  traefik.http.routers.cairn.rule: "Host(`go.example.com`)"
+  traefik.http.routers.cairn.rule: "Host(`start.example.com`)"
   traefik.http.routers.cairn.entrypoints: "websecure"
   traefik.http.routers.cairn.tls.certresolver: "cloudflare"
 ```
 
-Activez `CAIRN_TRUSTED_PROXY=true` pour que les IPs clients soient correctement lues depuis `CF-Connecting-IP`.
+Set `CAIRN_TRUSTED_PROXY=true` so client IPs are read correctly from `CF-Connecting-IP`.
 
 ### Nginx
 
@@ -202,54 +218,46 @@ location / {
 
 ---
 
-## Fonds d'écran
+## Wallpapers
 
-### Formats acceptés
+**Accepted formats:**
 
 | Type | Extensions |
 |---|---|
 | Image | `.jpg` `.jpeg` `.png` `.webp` `.avif` |
-| Vidéo | `.mp4` `.webm` |
+| Video | `.mp4` `.webm` |
 
-Taille max : 50 MB (configurable via `CAIRN_MAX_UPLOAD_SIZE`).
+**Adaptive theme:** Cairn samples the luminance of your active wallpaper and automatically switches between light and dark text for readability.
 
-### Thème adaptatif
-
-Cairn échantillonne la luminance du fond d'écran actif et bascule automatiquement entre un thème clair et sombre pour garantir la lisibilité.
+**Single pin:** Only one wallpaper can be pinned as favorite at a time. Pinning a new one automatically unpins the previous.
 
 ---
 
 ## Bookmarklet
 
-Sauvegardez la page courante en un clic depuis n'importe quel navigateur, y compris mobile Safari.
+Save any page in one click from any browser, including mobile Safari:
 
-1. **Compte → Bookmarklet → Générer un bookmarklet**
-2. Copiez le lien et glissez-le dans votre barre de favoris
-3. Cliquez le favori sur n'importe quelle page pour la sauvegarder dans Cairn
-
----
-
-## Moteurs de recherche
-
-| Moteur | Identifiant |
-|---|---|
-| DuckDuckGo (défaut) | `duckduckgo` |
-| Google | `google` |
-| Brave Search | `brave` |
-| Bing | `bing` |
-| Kagi | `kagi` |
-| Personnalisé | `custom` + URL se terminant par `=` |
-
-Les bangs DuckDuckGo (`!g`, `!yt`, `!gh`, `!hub`, etc.) fonctionnent quel que soit le moteur configuré.
+1. Go to **Account → Bookmarklet → Generate bookmarklet**
+2. Drag the link to your browser's bookmarks bar
+3. Click it on any page to save it to Cairn
 
 ---
 
-## Développement local
+## Registrations & invitations
 
-Go n'est pas requis sur la machine hôte — tout passe par Docker.
+By default, registration is **invite-only**. The admin sends an invite link by email.  
+Open registration (anyone can request an account) can be toggled in **Admin → Settings → Registration**.
+
+When open registration is enabled, users submit their email and the admin approves or revokes pending requests from **Admin → Invitations**.
+
+---
+
+## Development
+
+Go doesn't need to be installed locally — Docker handles everything.
 
 ```bash
-# Compiler
+# Build the binary (optional check)
 docker run --rm \
   -v "$(pwd)":/app \
   -v cairn-gomod-cache:/root/go/pkg/mod \
@@ -257,67 +265,75 @@ docker run --rm \
   golang:1.23-alpine \
   go build ./...
 
-# Vérifier les vulnérabilités
-docker run --rm \
-  -v "$(pwd)":/app \
-  -v cairn-gomod-cache:/root/go/pkg/mod \
-  -w /app \
-  golang:1.23-alpine \
-  sh -c "go install golang.org/x/vuln/cmd/govulncheck@v1.1.3 && govulncheck ./..."
-
-# Build multi-arch local (sans push)
+# Build multi-arch image locally (no push)
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --tag cairn:dev \
   .
 ```
 
-### Mode development
+**Development mode** — set `CAIRN_ENV=development` for text logs instead of JSON:
 
-Positionnez `CAIRN_ENV=development` pour obtenir des logs texte au lieu de JSON et autoriser `localhost:3000` dans les origines CORS.
-
----
-
-## Sécurité
-
-| Point | Implémentation |
-|---|---|
-| Mots de passe | Argon2id, time=1, memory=64 MB, threads=4 |
-| Sessions | SHA-256(token brut), cookie `HttpOnly` + `Secure` + `SameSite=Strict` |
-| TOTP | RFC 6238, secret chiffré AES-256-GCM en base |
-| Rate limiting | Sliding window par IP hashée (SHA-256), en mémoire |
-| Isolation utilisateurs | `userID` vérifié dans chaque requête repository |
-| Médias | Servis derrière l'authentification, jamais publics |
-| Uploads | Magic bytes validés, nom de fichier généré côté serveur |
-| Container | `scratch`, FS read-only, `no-new-privileges`, `CAP_DROP ALL` |
-| Headers HTTP | CSP, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy` |
+```yaml
+# in compose.yaml
+CAIRN_ENV: "development"
+```
 
 ---
 
-## Structure du projet
+## Project structure
 
 ```
 cairn/
-├── cmd/cairn/          — point d'entrée (main.go, router, graceful shutdown)
+├── cmd/cairn/          — entrypoint (main.go, router, graceful shutdown)
 ├── internal/
-│   ├── config/         — chargement et validation de la configuration
-│   ├── db/             — ouverture SQLite + migrations goose embarquées
-│   ├── model/          — structs de données
-│   ├── repository/     — accès base de données (interfaces + SQLite)
-│   ├── service/        — logique métier (auth, bookmarks, wallpapers, admin…)
-│   ├── handler/        — handlers HTTP JSON
+│   ├── config/         — config loading and validation
+│   ├── db/             — SQLite setup + embedded goose migrations
+│   ├── model/          — data structs
+│   ├── repository/     — database access (interfaces + SQLite implementations)
+│   ├── service/        — business logic (auth, bookmarks, wallpapers, admin…)
+│   ├── handler/        — HTTP JSON handlers
 │   └── middleware/     — auth, admin, rate limit, CORS, headers, bookmarklet
 ├── web/static/
-│   ├── index.html      — shell HTML
-│   ├── style.css       — styles (CSS variables, thème adaptatif)
-│   └── app.js          — SPA vanilla JS
-├── .env.example        — template variables d'environnement
-├── Dockerfile          — multi-stage build → image scratch
-└── compose.yaml        — déploiement production avec Traefik
+│   ├── index.html      — HTML shell
+│   ├── style.css       — styles (CSS variables, adaptive theme)
+│   └── app.js          — vanilla JS SPA (zero dependencies)
+├── .env.example        — environment variable template
+├── Dockerfile          — multi-stage build → ~5 MB scratch image
+└── compose.yaml        — production deployment with Traefik labels
 ```
 
 ---
 
-## Licence
+## Security
+
+| Area | Implementation |
+|---|---|
+| Passwords | Argon2id (time=1, memory=64 MB, threads=4) |
+| Sessions | SHA-256 hashed tokens, `HttpOnly` + `Secure` + `SameSite=Strict` cookies |
+| TOTP | RFC 6238, secrets encrypted AES-256-GCM at rest |
+| Rate limiting | Sliding window per hashed IP, in-memory |
+| User isolation | `userID` checked on every repository call; media served behind auth |
+| Uploads | Magic bytes validated, server-generated filenames |
+| Container | `scratch` base, read-only FS, `no-new-privileges`, `CAP_DROP ALL` |
+| HTTP headers | CSP, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy` |
+
+---
+
+## Tech stack
+
+| Component | Choice |
+|---|---|
+| Language | Go 1.23 |
+| Router | chi v5 |
+| Database | SQLite (WAL mode) |
+| SQLite driver | modernc.org/sqlite (pure Go, zero CGO) |
+| Migrations | goose (embedded) |
+| Docker image | `scratch` (~5 MB) |
+| Frontend | Vanilla JS, zero dependencies |
+
+---
+
+## License
 
 MIT
