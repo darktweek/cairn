@@ -85,6 +85,10 @@ func (s *authService) Login(ctx context.Context, email, password, totpCode, ip, 
 	email = strings.ToLower(strings.TrimSpace(email))
 	user, err := s.repos.Users.GetByEmail(ctx, email)
 	if err != nil {
+		// The identifier field accepts a username too.
+		user, err = s.repos.Users.GetByUsername(ctx, email)
+	}
+	if err != nil {
 		// avoid enumeration: same error for not found or wrong password
 		return nil, "", ErrUnauthorized
 	}

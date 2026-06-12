@@ -10,6 +10,7 @@ const TRANSLATIONS = {
     // Login page
     'login.email':              'Email',
     'login.password':           'Mot de passe',
+    'login.identifier':         'Email ou nom d\'utilisateur',
     'login.totp':               'Code TOTP',
     'login.submit':             'Connexion',
     'login.forgot':             'Mot de passe oublié ?',
@@ -301,6 +302,7 @@ const TRANSLATIONS = {
     // Login page
     'login.email':              'Email',
     'login.password':           'Password',
+    'login.identifier':         'Email or username',
     'login.totp':               'TOTP Code',
     'login.submit':             'Sign in',
     'login.forgot':             'Forgot password?',
