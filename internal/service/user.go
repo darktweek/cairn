@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,6 +28,8 @@ type UserService interface {
 	UpdateLocale(ctx context.Context, userID, locale string) error
 	GetAuditLog(ctx context.Context, userID string, offset, limit int) ([]*model.AuditEntry, int, error)
 	Stats(ctx context.Context, userID string) (*UserStats, error)
+	GetPrefs(ctx context.Context, userID string) (string, error)
+	SetPrefs(ctx context.Context, userID, prefs string) error
 }
 
 // UserStats are the per-account counters shown in the Compte panel and admin.
@@ -215,6 +218,24 @@ func (s *userService) uniqueUsername(ctx context.Context, username, name, email 
 		}
 	}
 	return base + "-" + randToken()[:6]
+}
+
+// GetPrefs returns the user's raw JSON preferences blob.
+func (s *userService) GetPrefs(ctx context.Context, userID string) (string, error) {
+	return s.repos.Users.GetPrefs(ctx, userID)
+}
+
+// SetPrefs stores the preferences blob after sanity checks: must be a
+// JSON object, capped at 8 KB. The shape belongs to the frontend.
+func (s *userService) SetPrefs(ctx context.Context, userID, prefs string) error {
+	if len(prefs) > 8<<10 {
+		return fmt.Errorf("%w: prefs too large", ErrInvalidInput)
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(prefs), &obj); err != nil {
+		return fmt.Errorf("%w: prefs must be a JSON object", ErrInvalidInput)
+	}
+	return s.repos.Users.SetPrefs(ctx, userID, prefs)
 }
 
 func (s *userService) Stats(ctx context.Context, userID string) (*UserStats, error) {

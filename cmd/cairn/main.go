@@ -217,6 +217,8 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 		r.Delete("/api/me/sessions", h.RevokeAllSessions)
 		r.Get("/api/me/audit", h.GetMyAuditLog)
 		r.Get("/api/me/stats", h.GetMyStats)
+		r.Get("/api/me/prefs", h.GetMyPrefs)
+		r.Put("/api/me/prefs", h.SetMyPrefs)
 		r.Delete("/api/me", h.DeleteAccount)
 
 		// TOTP

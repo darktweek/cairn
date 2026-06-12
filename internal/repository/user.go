@@ -17,6 +17,8 @@ type UserRepository interface {
 	GetByEmail(ctx context.Context, email string) (*model.User, error)
 	GetByUsername(ctx context.Context, username string) (*model.User, error)
 	UsernamesByIDs(ctx context.Context, ids []string) (map[string]string, error)
+	GetPrefs(ctx context.Context, userID string) (string, error)
+	SetPrefs(ctx context.Context, userID, prefs string) error
 	Update(ctx context.Context, user *model.User) error
 	UpdateLocale(ctx context.Context, userID, locale string) error
 	SoftDelete(ctx context.Context, id string) error
@@ -68,6 +70,34 @@ func (r *sqliteUserRepo) GetByEmail(ctx context.Context, email string) (*model.U
 		       storage_quota, search_engine, search_engine_url, locale, created_at, updated_at, deleted_at
 		FROM users WHERE email = ? COLLATE NOCASE AND deleted_at IS NULL`, email)
 	return scanUser(row)
+}
+
+// GetPrefs returns the raw JSON preferences blob for a user.
+func (r *sqliteUserRepo) GetPrefs(ctx context.Context, userID string) (string, error) {
+	var prefs string
+	err := r.db.QueryRowContext(ctx,
+		`SELECT prefs FROM users WHERE id = ? AND deleted_at IS NULL`, userID).Scan(&prefs)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("get prefs: %w", err)
+	}
+	return prefs, nil
+}
+
+// SetPrefs replaces the JSON preferences blob for a user.
+func (r *sqliteUserRepo) SetPrefs(ctx context.Context, userID, prefs string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE users SET prefs = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
+		prefs, time.Now().Unix(), userID)
+	if err != nil {
+		return fmt.Errorf("set prefs: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // UsernamesByIDs resolves usernames for a set of user IDs in one query —

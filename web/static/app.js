@@ -1406,8 +1406,36 @@ function loadThemePrefs() {
   try { return JSON.parse(localStorage.getItem('cairn_theme') || '{}'); } catch { return {}; }
 }
 
+let _prefsPushTimer = null;
 function saveThemePrefs(p) {
   localStorage.setItem('cairn_theme', JSON.stringify(p));
+  // Write-through to the account (debounced) so prefs follow the user
+  // across devices. localStorage stays as offline/anonymous fallback.
+  if (!S.user) return;
+  clearTimeout(_prefsPushTimer);
+  _prefsPushTimer = setTimeout(() => {
+    fetch('/api/me/prefs', {
+      method:      'PUT',
+      credentials: 'same-origin',
+      headers:     { 'Content-Type': 'application/json' },
+      body:        JSON.stringify(p),
+    }).catch(() => {});
+  }, 600);
+}
+
+// Pull account prefs at boot. Server wins over localStorage: the account
+// is the source of truth, the local copy is just a cache.
+async function syncPrefsFromServer() {
+  try {
+    const server = await GET('/me/prefs');
+    if (server && typeof server === 'object' && Object.keys(server).length) {
+      localStorage.setItem('cairn_theme', JSON.stringify(server));
+    } else {
+      // Fresh account: seed it with whatever this device had.
+      const local = loadThemePrefs();
+      if (Object.keys(local).length) saveThemePrefs(local);
+    }
+  } catch { /* offline or older server — keep local */ }
 }
 
 function applyThemePrefs(p) {
@@ -2979,7 +3007,8 @@ async function boot() {
   // Apply user locale before rendering any UI text.
   applyLocale(S.user.locale || 'en');
 
-  // Apply saved theme preferences (blur, rain)
+  // Pull account prefs (server wins), then apply (blur, rain, theme modes)
+  await syncPrefsFromServer();
   applyThemePrefs(loadThemePrefs());
 
   // Configurable menu bang + placeholder hint

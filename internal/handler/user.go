@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -108,6 +109,33 @@ func (h *Handler) RevokeAllSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.clearSessionCookie(w)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// GetMyPrefs — GET /api/me/prefs. Raw JSON blob owned by the frontend.
+func (h *Handler) GetMyPrefs(w http.ResponseWriter, r *http.Request) {
+	user := middleware.UserFromCtx(r.Context())
+	prefs, err := h.User.GetPrefs(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(prefs))
+}
+
+// SetMyPrefs — PUT /api/me/prefs. Body is the whole prefs object.
+func (h *Handler) SetMyPrefs(w http.ResponseWriter, r *http.Request) {
+	user := middleware.UserFromCtx(r.Context())
+	body, err := io.ReadAll(io.LimitReader(r.Body, 16<<10))
+	if err != nil {
+		writeError(w, fmt.Errorf("%w: read body", service.ErrInvalidInput))
+		return
+	}
+	if err := h.User.SetPrefs(r.Context(), user.ID, string(body)); err != nil {
+		writeError(w, err)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
