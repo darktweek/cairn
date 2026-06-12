@@ -2050,7 +2050,15 @@ function renderWallpaperGrid(grid) {
     const thumb    = el('div', 'wp-thumb' + (wp.is_pinned ? ' pinned' : ''));
     const media    = el(isVid ? 'video' : 'img');
     media.src = url;
-    if (isVid) { media.muted = true; media.autoplay = true; media.loop = true; }
+    if (isVid) {
+      media.muted = true; media.autoplay = true; media.loop = true;
+      // Without playsinline iOS hijacks the first autoplaying video into the
+      // native fullscreen player; metadata preload keeps a grid of videos
+      // from exhausting mobile Safari's memory.
+      media.playsInline = true;
+      media.setAttribute('playsinline', '');
+      media.preload = 'metadata';
+    }
 
     const overlay  = el('div', 'wp-thumb-overlay');
 

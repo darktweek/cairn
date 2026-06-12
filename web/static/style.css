@@ -122,7 +122,13 @@ body, .clock, .date-line, .search-form, .search-input {
 .bg-layer {
   position: fixed;
   inset: 0;
-  width: 100%; height: 100%;
+  /* lvh = large viewport (iOS toolbars collapsed) — plain % stops at the
+     small viewport and leaves bare bands top and bottom on mobile Safari.
+     Explicit sizes required: replaced elements (img/video) don't stretch
+     from inset alone. */
+  width: 100vw;
+  height: 100vh;
+  height: 100lvh;
   z-index: 0;
 }
 
@@ -144,7 +150,9 @@ body, .clock, .date-line, .search-form, .search-input {
 #dust-canvas {
   position: fixed;
   inset: 0;
-  width: 100%; height: 100%;
+  width: 100vw;
+  height: 100vh;
+  height: 100lvh;
   z-index: 1;
   pointer-events: none;
 }
