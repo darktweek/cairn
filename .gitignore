@@ -3,7 +3,7 @@ data/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
-cairn
+/cairn
 cairn-bin
 
 # Roadmap interne — ne pas publier

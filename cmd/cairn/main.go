@@ -141,10 +141,11 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 	})
 
 	// Rate limit configs.
-	// 10/5min: forgiving for a human who fumbles a password, still useless
-	// for brute force (Argon2id makes each attempt expensive anyway).
+	// IP-level is only a coarse spray guard: behind Docker NAT every client
+	// shares one bucket. The real brute-force lock is per-account in
+	// AuthService.Login (10/5min per identifier).
 	loginRL := middleware.RateLimit(
-		middleware.RateLimitConfig{Max: 10, Window: 5 * time.Minute},
+		middleware.RateLimitConfig{Max: 30, Window: 5 * time.Minute},
 		cfg.TrustedProxy,
 	)
 	registerRL := middleware.RateLimit(

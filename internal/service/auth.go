@@ -20,6 +20,7 @@ import (
 
 	"github.com/darktweek/cairn/internal/config"
 	"github.com/darktweek/cairn/internal/model"
+	"github.com/darktweek/cairn/internal/ratelimit"
 	"github.com/darktweek/cairn/internal/repository"
 	"github.com/oklog/ulid/v2"
 	"golang.org/x/crypto/argon2"
@@ -72,10 +73,16 @@ type authService struct {
 	settings    SettingsService
 	email       EmailService
 	resetTokens sync.Map // tokenHash → resetEntry
+	// Per-account login throttle — independent from the per-IP middleware,
+	// which collapses to a single shared bucket behind Docker NAT.
+	loginLimiter *ratelimit.Limiter
 }
 
 func newAuthService(repos *repository.Repositories, cfg *config.Config, settings SettingsService, email EmailService) AuthService {
-	return &authService{repos: repos, cfg: cfg, settings: settings, email: email}
+	return &authService{
+		repos: repos, cfg: cfg, settings: settings, email: email,
+		loginLimiter: ratelimit.New(ratelimit.Config{Max: 10, Window: 5 * time.Minute}),
+	}
 }
 
 // Login authenticates a user. totpCode is optional — if TOTP is enabled and empty, returns ErrTOTPRequired.
@@ -83,6 +90,14 @@ func (s *authService) Login(ctx context.Context, email, password, totpCode, ip, 
 	// Mobile keyboards autocapitalize and autofill can pad — never let
 	// formatting cost someone their login.
 	email = strings.ToLower(strings.TrimSpace(email))
+
+	// Throttle per submitted identifier: brute-forcing one account stays
+	// impossible even when every client shares the proxy/NAT IP, and one
+	// noisy device can't lock the whole network out.
+	if !s.loginLimiter.Allow(email) {
+		return nil, "", ErrRateLimited
+	}
+
 	user, err := s.repos.Users.GetByEmail(ctx, email)
 	if err != nil {
 		// The identifier field accepts a username too.

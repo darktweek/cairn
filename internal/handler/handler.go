@@ -63,6 +63,8 @@ func mapError(err error) (int, string) {
 		return http.StatusUnauthorized, "UNAUTHORIZED"
 	case errors.Is(err, service.ErrTOTPRequired):
 		return http.StatusUnauthorized, "TOTP_REQUIRED"
+	case errors.Is(err, service.ErrRateLimited):
+		return http.StatusTooManyRequests, "RATE_LIMITED"
 	case errors.Is(err, service.ErrForbidden):
 		return http.StatusForbidden, "FORBIDDEN"
 	case errors.Is(err, service.ErrNotFound):

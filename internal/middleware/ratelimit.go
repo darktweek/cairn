@@ -6,8 +6,9 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/darktweek/cairn/internal/ratelimit"
 )
 
 // RateLimitConfig defines limits for a route group.
@@ -16,82 +17,26 @@ type RateLimitConfig struct {
 	Window time.Duration
 }
 
-type rateLimiter struct {
-	cfg          RateLimitConfig
-	trustedProxy bool
-	mu           sync.Mutex
-	windows      map[string][]time.Time
-}
-
-// RateLimit returns a sliding window rate limiter middleware.
+// RateLimit returns a sliding window rate limiter middleware keyed by
+// client IP. Behind Docker NAT or a spoofable X-Forwarded-For all clients
+// can collapse onto one key, so this is a coarse spray guard — sensitive
+// endpoints (login) add their own per-account limiter in the service.
 func RateLimit(cfg RateLimitConfig, trustedProxy bool) func(http.Handler) http.Handler {
-	rl := &rateLimiter{
-		cfg:          cfg,
-		trustedProxy: trustedProxy,
-		windows:      make(map[string][]time.Time),
-	}
+	l := ratelimit.New(ratelimit.Config{Max: cfg.Max, Window: cfg.Window})
 
-	// Background cleanup every minute.
-	go func() {
-		t := time.NewTicker(time.Minute)
-		for range t.C {
-			rl.cleanup()
-		}
-	}()
-
-	return rl.middleware
-}
-
-func (rl *rateLimiter) middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := clientIP(r, rl.trustedProxy)
-		key := hashIP(ip)
-
-		now := time.Now()
-		cutoff := now.Add(-rl.cfg.Window)
-
-		rl.mu.Lock()
-		timestamps := rl.windows[key]
-		valid := timestamps[:0]
-		for _, t := range timestamps {
-			if t.After(cutoff) {
-				valid = append(valid, t)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip := clientIP(r, trustedProxy)
+			if !l.Allow(hashIP(ip)) {
+				retryAfter := int(l.Window().Seconds())
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				w.Write([]byte(`{"error":"too many requests","code":"RATE_LIMITED"}`))
+				return
 			}
-		}
-
-		if len(valid) >= rl.cfg.Max {
-			rl.mu.Unlock()
-			retryAfter := int(rl.cfg.Window.Seconds())
-			w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusTooManyRequests)
-			w.Write([]byte(`{"error":"too many requests","code":"RATE_LIMITED"}`))
-			return
-		}
-
-		rl.windows[key] = append(valid, now)
-		rl.mu.Unlock()
-
-		next.ServeHTTP(w, r)
-	})
-}
-
-func (rl *rateLimiter) cleanup() {
-	cutoff := time.Now().Add(-rl.cfg.Window)
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-	for key, timestamps := range rl.windows {
-		valid := timestamps[:0]
-		for _, t := range timestamps {
-			if t.After(cutoff) {
-				valid = append(valid, t)
-			}
-		}
-		if len(valid) == 0 {
-			delete(rl.windows, key)
-		} else {
-			rl.windows[key] = valid
-		}
+			next.ServeHTTP(w, r)
+		})
 	}
 }
 

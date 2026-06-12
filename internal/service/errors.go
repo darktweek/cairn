@@ -10,6 +10,7 @@ var (
 	ErrInvalidInput    = errors.New("invalid input")
 	ErrInactiveUser    = errors.New("account inactive")
 	ErrTOTPRequired    = errors.New("totp required")
+	ErrRateLimited     = errors.New("too many requests")
 	ErrInvalidTOTP     = errors.New("invalid totp code")
 	ErrWallpaperLimit  = errors.New("wallpaper limit reached")
 	ErrUnsupportedFile = errors.New("unsupported file type")
