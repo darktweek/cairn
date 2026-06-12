@@ -944,6 +944,14 @@ function initSearchSuggestions() {
   let activeIdx = -1;
   let items = [];
 
+  // The dropdown sits below a vertically centered search bar: in short
+  // windows the CSS cap alone still overflows. Fit it to the real space.
+  function fitSuggestions() {
+    const top = box.getBoundingClientRect().top;
+    box.style.maxHeight = Math.max(120, window.innerHeight - top - 12) + 'px';
+  }
+  new ResizeObserver(fitSuggestions).observe(document.documentElement);
+
   function hideSuggestions() {
     box.classList.remove('visible');
     box.innerHTML = '';
@@ -954,6 +962,9 @@ function initSearchSuggestions() {
   function setActive(idx) {
     items.forEach((it, i) => it.classList.toggle('active', i === idx));
     activeIdx = idx;
+    // The list is height-capped and scrollable — keep the keyboard
+    // selection visible.
+    if (items[idx]) items[idx].scrollIntoView({ block: 'nearest' });
   }
 
   function buildBangRow(bang, rest) {
@@ -1001,6 +1012,7 @@ function initSearchSuggestions() {
       items.push(row);
     }
     box.classList.add('visible');
+    fitSuggestions();
   }
 
   async function showBookmarkSuggestions(q) {
@@ -1040,6 +1052,7 @@ function initSearchSuggestions() {
       }
 
       box.classList.add('visible');
+      fitSuggestions();
     } catch { hideSuggestions(); }
   }
 

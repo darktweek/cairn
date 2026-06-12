@@ -533,6 +533,10 @@ body.searching #date-line {
   border: 1px solid var(--border);
   border-radius: 1rem;
   overflow: hidden;
+  overflow-y: auto;
+  /* Never taller than the space under the search bar — the search sits
+     near the vertical middle, so cap at a bit under half the viewport. */
+  max-height: min(42dvh, 22rem);
   display: none;
   box-shadow: 0 8px 32px rgba(0,0,0,0.45);
   z-index: 200;
