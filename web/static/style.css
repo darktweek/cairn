@@ -1391,3 +1391,99 @@ body.searching #date-line {
 ::-webkit-scrollbar-track        { background: transparent; }
 ::-webkit-scrollbar-thumb        { background: var(--border); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover  { background: var(--text-dimmer); }
+
+/* ── Touch devices — no hover available ─────────────────
+   Anything revealed on :hover must be reachable by touch. */
+@media (hover: none) {
+  .bm-actions                { display: flex; }
+  .hub-tile-bang             { opacity: 0.55; }
+  .wp-thumb .wp-thumb-overlay {
+    display: flex;
+    background: linear-gradient(to top, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.0) 55%);
+    align-items: flex-end;
+    padding: 0.3rem;
+  }
+  .icon-btn  { padding: 0.4rem 0.55rem; font-size: 0.9rem; }
+  .sug-item  { padding: 0.8rem 1.1rem; }
+}
+
+/* ── Mobile ─────────────────────────────────────────────
+   Panels and modals become bottom sheets; everything else
+   tightens up. Tap targets stay ≥ 44px. */
+@keyframes sheetRise {
+  from { opacity: 0; transform: translateY(8%); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (max-width: 640px) {
+  /* Home — slightly tighter rhythm, keyboard-safe height */
+  .home-center { padding: 0 1rem; }
+  .clock       { font-size: clamp(4.2rem, 21vw, 6rem); }
+  .search-wrap { margin-top: 2.4rem; width: min(580px, 92vw); }
+  .sug-url     { display: none; }
+
+  /* Hub — scrollable, breathing room for thumbs */
+  .hub-overlay  { padding: max(3vh, 1.2rem) 0.9rem; align-items: flex-start; overflow-y: auto; }
+  .hub-inner    { gap: 1.1rem; margin: auto 0; }
+  .hub-greeting { font-size: clamp(1.5rem, 6.5vw, 2rem); }
+
+  /* Panels → bottom sheets */
+  .panel-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .panel {
+    width: 100%;
+    height: min(90dvh, 100%);
+    border-radius: 1.2rem 1.2rem 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: sheetRise 0.38s cubic-bezier(.16,1,.3,1);
+  }
+  .panel-header { padding: 1rem 1rem 0.8rem; }
+  .panel-close  { padding: 0.5rem 0.7rem; font-size: 1.25rem; }
+  .panel-body   { padding: 0.9rem 1rem calc(0.9rem + env(safe-area-inset-bottom)); }
+
+  /* Modals → bottom sheets too */
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal {
+    width: 100%;
+    border-radius: 1.2rem 1.2rem 0 0;
+    padding: 1.4rem 1.2rem calc(1.4rem + env(safe-area-inset-bottom));
+    animation: sheetRise 0.38s cubic-bezier(.16,1,.3,1);
+  }
+
+  /* Tabs — bigger tap targets, momentum scroll */
+  .tabs { padding: 0 0.6rem; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab  { padding: 0.8rem 0.8rem; font-size: 0.82rem; }
+
+  /* Forms & controls */
+  .form-input    { padding: 0.7rem 0.85rem; font-size: 1rem; }
+  .btn           { padding: 0.7rem 1.1rem; }
+  .btn-small     { padding: 0.45rem 0.7rem; }
+  .engine-grid   { grid-template-columns: repeat(2, 1fr); }
+  .settings-row  { flex-wrap: wrap; row-gap: 0.4rem; }
+  .effect-row    { flex-wrap: wrap; row-gap: 0.4rem; }
+  .blur-slider   { width: 110px; }
+  .segmented button { padding: 0.45rem 0.7rem; }
+
+  /* Bookmarks */
+  .bm-filter-bar    { padding: 0.6rem 1rem; }
+  .bm-folder-select { width: 120px; }
+  .bm-url           { display: none; }
+  .bm-item          { padding: 0.5rem 0.4rem; }
+
+  /* Admin */
+  .stat-grid  { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+  .audit-row  { flex-wrap: wrap; row-gap: 0.1rem; padding: 0.55rem 0; }
+  .audit-action { width: auto; flex: 1 1 60%; }
+  .audit-time   { flex-basis: 100%; order: 4; font-size: 0.7rem; }
+  .admin-user-row { flex-wrap: wrap; row-gap: 0.3rem; }
+  .wallpaper-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+}
+
+/* Short landscape phones — don't let the clock eat the screen */
+@media (max-height: 480px) {
+  .clock       { font-size: clamp(3rem, 14vh, 5rem); }
+  .search-wrap { margin-top: 1.2rem; }
+}
