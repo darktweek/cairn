@@ -1,15 +1,13 @@
 module github.com/darktweek/cairn
 
-go 1.23.0
-
-toolchain go1.23.12
+go 1.25.0
 
 require (
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/pressly/goose/v3 v3.21.1
-	golang.org/x/crypto v0.38.0
-	golang.org/x/net v0.40.0
+	golang.org/x/crypto v0.53.0
+	golang.org/x/net v0.56.0
 	modernc.org/sqlite v1.33.1
 )
 
@@ -24,7 +22,7 @@ require (
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect
 	modernc.org/libc v1.55.3 // indirect
