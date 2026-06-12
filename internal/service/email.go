@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"net/smtp"
+	"strconv"
 	"time"
 
 	"github.com/darktweek/cairn/internal/config"
@@ -145,7 +146,7 @@ func (s *emailService) send(ctx context.Context, to, subject, htmlBody string) e
 		return nil
 	}
 
-	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
 
 	conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
 	if err != nil {
