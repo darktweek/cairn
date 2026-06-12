@@ -11,19 +11,17 @@ This project is **100% vibecoded** — designed and built in conversation with A
 
 ## What it looks like
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                                                              │
-│              [ wallpaper or video background ]               │
-│              [ rain / dust canvas effect ]                   │
-│                                                              │
-│                        12:34                                 │
-│               Tuesday 10 June 2026 · W24                    │
-│                                                              │
-│                 [ search bar ]                               │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-```
+*The home — clock, search, your wallpaper (image or video), rain effect:*
+
+![Home](docs/screenshot-home.png)
+
+*The hub (`!menu` in the search bar) — liquid-glass tiles over your background:*
+
+![Hub](docs/screenshot-hub.png)
+
+*The login:*
+
+![Login](docs/screenshot-login.png)
 
 Type `!bm` in the search bar to open the bookmark manager.  
 Type `!menu` (or your configured bang) for the full-screen hub.
