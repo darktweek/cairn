@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/darktweek/cairn/internal/model"
@@ -15,6 +16,7 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id string) (*model.User, error)
 	GetByEmail(ctx context.Context, email string) (*model.User, error)
 	GetByUsername(ctx context.Context, username string) (*model.User, error)
+	UsernamesByIDs(ctx context.Context, ids []string) (map[string]string, error)
 	Update(ctx context.Context, user *model.User) error
 	UpdateLocale(ctx context.Context, userID, locale string) error
 	SoftDelete(ctx context.Context, id string) error
@@ -66,6 +68,35 @@ func (r *sqliteUserRepo) GetByEmail(ctx context.Context, email string) (*model.U
 		       storage_quota, search_engine, search_engine_url, locale, created_at, updated_at, deleted_at
 		FROM users WHERE email = ? COLLATE NOCASE AND deleted_at IS NULL`, email)
 	return scanUser(row)
+}
+
+// UsernamesByIDs resolves usernames for a set of user IDs in one query —
+// used by the audit log so actor names never require listing all users.
+// Soft-deleted users are included: their past actions keep a name.
+func (r *sqliteUserRepo) UsernamesByIDs(ctx context.Context, ids []string) (map[string]string, error) {
+	out := make(map[string]string, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	placeholders := strings.Repeat("?,", len(ids)-1) + "?"
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, username FROM users WHERE id IN (`+placeholders+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("usernames by ids: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, fmt.Errorf("usernames by ids scan: %w", err)
+		}
+		out[id] = name
+	}
+	return out, rows.Err()
 }
 
 func (r *sqliteUserRepo) GetByUsername(ctx context.Context, username string) (*model.User, error) {

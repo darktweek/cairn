@@ -25,6 +25,7 @@ type AdminService interface {
 	ListPendingRegistrations(ctx context.Context) ([]*model.PendingRegistration, error)
 	RevokePendingRegistration(ctx context.Context, adminID, id string) error
 	GetAuditLog(ctx context.Context, offset, limit int, filter repository.AuditFilter) ([]*model.AuditEntry, int, error)
+	ResolveUsernames(ctx context.Context, ids []string) (map[string]string, error)
 	GetStats(ctx context.Context) (*model.AdminStats, error)
 }
 
@@ -187,6 +188,10 @@ func (s *adminService) RevokePendingRegistration(ctx context.Context, adminID, i
 
 func (s *adminService) GetAuditLog(ctx context.Context, offset, limit int, filter repository.AuditFilter) ([]*model.AuditEntry, int, error) {
 	return s.repos.Audit.List(ctx, offset, limit, filter)
+}
+
+func (s *adminService) ResolveUsernames(ctx context.Context, ids []string) (map[string]string, error) {
+	return s.repos.Users.UsernamesByIDs(ctx, ids)
 }
 
 func (s *adminService) GetStats(ctx context.Context) (*model.AdminStats, error) {

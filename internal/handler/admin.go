@@ -225,13 +225,19 @@ func (h *Handler) AdminGetAuditLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve actor usernames so the journal shows names, not raw IDs.
-	names := map[string]string{}
-	if users, _, e := h.Admin.ListUsers(r.Context(), 0, 1000); e == nil {
-		for _, u := range users {
-			names[u.ID] = u.Username
+	// Resolve actor usernames so the journal shows names, not raw IDs —
+	// only the IDs present on this page, never a full user listing.
+	idSet := map[string]struct{}{}
+	for _, e := range entries {
+		if e.UserID != nil {
+			idSet[*e.UserID] = struct{}{}
 		}
 	}
+	ids := make([]string, 0, len(idSet))
+	for id := range idSet {
+		ids = append(ids, id)
+	}
+	names, _ := h.Admin.ResolveUsernames(r.Context(), ids)
 
 	out := make([]map[string]any, 0, len(entries))
 	for _, e := range entries {
