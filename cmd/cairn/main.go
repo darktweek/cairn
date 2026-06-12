@@ -297,6 +297,9 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 	r.Get("/app.js", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, static, "app.js")
 	})
+	r.Get("/i18n.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, static, "i18n.js")
+	})
 	// SPA fallback: all unknown routes serve index.html.
 	r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, static, "index.html")
