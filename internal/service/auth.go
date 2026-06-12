@@ -80,6 +80,9 @@ func newAuthService(repos *repository.Repositories, cfg *config.Config, settings
 
 // Login authenticates a user. totpCode is optional — if TOTP is enabled and empty, returns ErrTOTPRequired.
 func (s *authService) Login(ctx context.Context, email, password, totpCode, ip, userAgent string) (*model.Session, string, error) {
+	// Mobile keyboards autocapitalize and autofill can pad — never let
+	// formatting cost someone their login.
+	email = strings.ToLower(strings.TrimSpace(email))
 	user, err := s.repos.Users.GetByEmail(ctx, email)
 	if err != nil {
 		// avoid enumeration: same error for not found or wrong password

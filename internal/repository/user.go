@@ -64,7 +64,7 @@ func (r *sqliteUserRepo) GetByEmail(ctx context.Context, email string) (*model.U
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, username, email, password, role, is_active, wallpaper_limit, upload_size_limit,
 		       storage_quota, search_engine, search_engine_url, locale, created_at, updated_at, deleted_at
-		FROM users WHERE email = ? AND deleted_at IS NULL`, email)
+		FROM users WHERE email = ? COLLATE NOCASE AND deleted_at IS NULL`, email)
 	return scanUser(row)
 }
 

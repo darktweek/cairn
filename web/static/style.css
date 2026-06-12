@@ -5,6 +5,8 @@ html, body {
   width: 100%; height: 100%;
   overflow: hidden;
   font-family: system-ui, -apple-system, sans-serif;
+  /* Safari paints overscroll/notch areas with this — never white */
+  background: #0d0d1a;
 }
 
 /* ── CSS Variables ──────────────────────────────────── */
