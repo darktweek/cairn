@@ -59,7 +59,7 @@ Type `!menu` (or your configured bang) for the full-screen hub.
 ### Step 1 — Clone the repo
 
 ```bash
-git clone https://github.com/darktweek/cairn-dev.git
+git clone https://github.com/darktweek/cairn.git
 cd cairn
 ```
 
