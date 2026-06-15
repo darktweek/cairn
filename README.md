@@ -59,7 +59,7 @@ Type `!menu` (or your configured bang) for the full-screen hub.
 ### Step 1 — Clone the repo
 
 ```bash
-git clone https://github.com/darktweek/cairn.git
+git clone https://github.com/darktweek/cairn-dev.git
 cd cairn
 ```
 
@@ -318,7 +318,7 @@ cairn/
 
 | Component | Choice |
 |---|---|
-| Language | Go 1.23 |
+| Language | Go 1.26 |
 | Router | chi v5 |
 | Database | SQLite (WAL mode) |
 | SQLite driver | modernc.org/sqlite (pure Go, zero CGO) |
