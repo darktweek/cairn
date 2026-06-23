@@ -27,15 +27,18 @@ type AdminService interface {
 	GetAuditLog(ctx context.Context, offset, limit int, filter repository.AuditFilter) ([]*model.AuditEntry, int, error)
 	ResolveUsernames(ctx context.Context, ids []string) (map[string]string, error)
 	GetStats(ctx context.Context) (*model.AdminStats, error)
+	// TestSMTP sends a test email to adminEmail and logs the result in the audit log.
+	TestSMTP(ctx context.Context, adminID, adminEmail string) error
 }
 
 type adminService struct {
 	repos *repository.Repositories
 	cfg   *config.Config
+	email EmailService
 }
 
-func newAdminService(repos *repository.Repositories, cfg *config.Config) AdminService {
-	return &adminService{repos: repos, cfg: cfg}
+func newAdminService(repos *repository.Repositories, cfg *config.Config, email EmailService) AdminService {
+	return &adminService{repos: repos, cfg: cfg, email: email}
 }
 
 func (s *adminService) ListUsers(ctx context.Context, offset, limit int) ([]*model.User, int, error) {
@@ -95,7 +98,19 @@ func (s *adminService) ActivateUser(ctx context.Context, adminID, userID string)
 	user.IsActive = true
 	user.UpdatedAt = time.Now()
 
-	return s.repos.Users.Update(ctx, user)
+	if err := s.repos.Users.Update(ctx, user); err != nil {
+		return err
+	}
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:     ulid.Make().String(),
+		UserID: &adminID,
+		Action: "user_activated",
+		Metadata: map[string]any{
+			"target_user_id": userID,
+		},
+		CreatedAt: time.Now(),
+	})
+	return nil
 }
 
 func (s *adminService) DeleteUser(ctx context.Context, adminID, userID string) error {
@@ -133,11 +148,22 @@ func (s *adminService) SetWallpaperLimit(ctx context.Context, adminID, userID st
 	if err != nil {
 		return ErrNotFound
 	}
-
 	user.WallpaperLimit = limit
 	user.UpdatedAt = time.Now()
-
-	return s.repos.Users.Update(ctx, user)
+	if err := s.repos.Users.Update(ctx, user); err != nil {
+		return err
+	}
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:     ulid.Make().String(),
+		UserID: &adminID,
+		Action: "user_limit_changed",
+		Metadata: map[string]any{
+			"target_user_id": userID,
+			"limit_type":     "wallpaper",
+		},
+		CreatedAt: time.Now(),
+	})
+	return nil
 }
 
 func (s *adminService) SetUploadSizeLimit(ctx context.Context, adminID, userID string, limit *int64) error {
@@ -145,11 +171,22 @@ func (s *adminService) SetUploadSizeLimit(ctx context.Context, adminID, userID s
 	if err != nil {
 		return ErrNotFound
 	}
-
 	user.UploadSizeLimit = limit
 	user.UpdatedAt = time.Now()
-
-	return s.repos.Users.Update(ctx, user)
+	if err := s.repos.Users.Update(ctx, user); err != nil {
+		return err
+	}
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:     ulid.Make().String(),
+		UserID: &adminID,
+		Action: "user_limit_changed",
+		Metadata: map[string]any{
+			"target_user_id": userID,
+			"limit_type":     "upload_size",
+		},
+		CreatedAt: time.Now(),
+	})
+	return nil
 }
 
 func (s *adminService) SetStorageQuota(ctx context.Context, adminID, userID string, quota *int64) error {
@@ -157,11 +194,22 @@ func (s *adminService) SetStorageQuota(ctx context.Context, adminID, userID stri
 	if err != nil {
 		return ErrNotFound
 	}
-
 	user.StorageQuota = quota
 	user.UpdatedAt = time.Now()
-
-	return s.repos.Users.Update(ctx, user)
+	if err := s.repos.Users.Update(ctx, user); err != nil {
+		return err
+	}
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:     ulid.Make().String(),
+		UserID: &adminID,
+		Action: "user_limit_changed",
+		Metadata: map[string]any{
+			"target_user_id": userID,
+			"limit_type":     "storage_quota",
+		},
+		CreatedAt: time.Now(),
+	})
+	return nil
 }
 
 func (s *adminService) ListPendingRegistrations(ctx context.Context) ([]*model.PendingRegistration, error) {
@@ -263,6 +311,22 @@ func (s *adminService) GetStats(ctx context.Context) (*model.AdminStats, error) 
 	}
 
 	return stats, nil
+}
+
+func (s *adminService) TestSMTP(ctx context.Context, adminID, adminEmail string) error {
+	err := s.email.SendTestEmail(ctx, adminEmail)
+	action := "smtp_test_sent"
+	if err != nil {
+		action = "smtp_test_failed"
+	}
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:        ulid.Make().String(),
+		UserID:    &adminID,
+		Action:    action,
+		Metadata:  map[string]any{"to": adminEmail},
+		CreatedAt: time.Now(),
+	})
+	return err
 }
 
 // guardLastAdmin returns ErrForbidden if the target user is the only active admin.

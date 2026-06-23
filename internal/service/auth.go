@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
@@ -23,6 +24,7 @@ import (
 	"github.com/darktweek/cairn/internal/ratelimit"
 	"github.com/darktweek/cairn/internal/repository"
 	"github.com/oklog/ulid/v2"
+	qrcode "github.com/skip2/go-qrcode"
 	"golang.org/x/crypto/argon2"
 )
 
@@ -39,13 +41,13 @@ const (
 type AuthService interface {
 	Login(ctx context.Context, email, password, totpCode, ip, userAgent string) (*model.Session, string, error)
 	CreateSessionForUser(ctx context.Context, userID, ip, userAgent string) (*model.Session, string, error)
-	Logout(ctx context.Context, sessionID string) error
+	Logout(ctx context.Context, sessionID, userID string) error
 	LogoutForUser(ctx context.Context, sessionID, userID string) error
 	LogoutAll(ctx context.Context, userID string) error
 	ListSessions(ctx context.Context, userID string) ([]*model.Session, error)
 	ValidateSession(ctx context.Context, token string) (*model.User, *model.Session, error)
 	CreateBookmarkletSession(ctx context.Context, userID, ip, userAgent string) (string, error)
-	BeginTOTP(ctx context.Context, userID string) (secret, qrCodeURL string, err error)
+	BeginTOTP(ctx context.Context, userID string) (secret, qrCodeURL, qrImage string, err error)
 	ConfirmTOTP(ctx context.Context, userID, code string) error
 	ValidateTOTP(ctx context.Context, userID, code string) (bool, error)
 	DisableTOTP(ctx context.Context, userID, password string) error
@@ -53,10 +55,10 @@ type AuthService interface {
 	ResetPassword(ctx context.Context, token, newPassword string) error
 	// Registration flow (email-verified, TOTP-mandatory)
 	RequestRegistration(ctx context.Context, username, email string) error
-	ValidateSetupToken(ctx context.Context, token string) (username, email, totpSecret, totpURI string, err error)
+	ValidateSetupToken(ctx context.Context, token string) (username, email, totpSecret, totpURI, qrImage string, err error)
 	CompleteSetup(ctx context.Context, token, password, totpCode string, ip, userAgent string) (*model.Session, string, error)
 	// Invite setup flow (for invite tokens)
-	PrepareInviteSetup(ctx context.Context, inviteToken, username string) (email, totpSecret, totpURI string, err error)
+	PrepareInviteSetup(ctx context.Context, inviteToken, username string) (email, totpSecret, totpURI, qrImage string, err error)
 	CompleteInviteSetup(ctx context.Context, inviteToken, password, totpCode string, ip, userAgent string) (*model.Session, string, error)
 	// Account deletion
 	DeleteAccount(ctx context.Context, userID, password string) error
@@ -170,8 +172,17 @@ func (s *authService) CreateSessionForUser(ctx context.Context, userID, ip, user
 	return sess, token, nil
 }
 
-func (s *authService) Logout(ctx context.Context, sessionID string) error {
-	return s.repos.Sessions.DeleteByID(ctx, sessionID)
+func (s *authService) Logout(ctx context.Context, sessionID, userID string) error {
+	if err := s.repos.Sessions.DeleteByID(ctx, sessionID); err != nil {
+		return err
+	}
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:        ulid.Make().String(),
+		UserID:    &userID,
+		Action:    "logout",
+		CreatedAt: time.Now(),
+	})
+	return nil
 }
 
 // LogoutForUser revokes a session only if it belongs to the given user — prevents IDOR.
@@ -182,14 +193,32 @@ func (svc *authService) LogoutForUser(ctx context.Context, sessionID, userID str
 	}
 	for _, sess := range sessions {
 		if sess.ID == sessionID {
-			return svc.repos.Sessions.DeleteByID(ctx, sessionID)
+			if err := svc.repos.Sessions.DeleteByID(ctx, sessionID); err != nil {
+				return err
+			}
+			_ = svc.repos.Audit.Log(ctx, &model.AuditEntry{
+				ID:        ulid.Make().String(),
+				UserID:    &userID,
+				Action:    "session_revoked",
+				CreatedAt: time.Now(),
+			})
+			return nil
 		}
 	}
 	return ErrNotFound
 }
 
 func (s *authService) LogoutAll(ctx context.Context, userID string) error {
-	return s.repos.Sessions.DeleteByUserID(ctx, userID)
+	if err := s.repos.Sessions.DeleteByUserID(ctx, userID); err != nil {
+		return err
+	}
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:        ulid.Make().String(),
+		UserID:    &userID,
+		Action:    "logout_all",
+		CreatedAt: time.Now(),
+	})
+	return nil
 }
 
 func (s *authService) ListSessions(ctx context.Context, userID string) ([]*model.Session, error) {
@@ -212,24 +241,24 @@ func (s *authService) ValidateSession(ctx context.Context, token string) (*model
 	return user, sess, nil
 }
 
-func (s *authService) BeginTOTP(ctx context.Context, userID string) (string, string, error) {
+func (s *authService) BeginTOTP(ctx context.Context, userID string) (string, string, string, error) {
 	user, err := s.repos.Users.GetByID(ctx, userID)
 	if err != nil {
-		return "", "", ErrNotFound
+		return "", "", "", ErrNotFound
 	}
 
 	secret, err := generateTOTPSecret()
 	if err != nil {
-		return "", "", fmt.Errorf("generate totp secret: %w", err)
+		return "", "", "", fmt.Errorf("generate totp secret: %w", err)
 	}
 
 	encrypted, err := s.encryptAESGCM([]byte(secret))
 	if err != nil {
-		return "", "", fmt.Errorf("encrypt totp secret: %w", err)
+		return "", "", "", fmt.Errorf("encrypt totp secret: %w", err)
 	}
 
 	if err := s.repos.TOTP.Create(ctx, userID, encrypted); err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	qrURL := fmt.Sprintf(
@@ -240,7 +269,7 @@ func (s *authService) BeginTOTP(ctx context.Context, userID string) (string, str
 		url.QueryEscape(s.settings.TOTPIssuer(ctx).Value),
 	)
 
-	return secret, qrURL, nil
+	return secret, qrURL, totpQRImage(qrURL), nil
 }
 
 func (s *authService) ConfirmTOTP(ctx context.Context, userID, code string) error {
@@ -258,7 +287,16 @@ func (s *authService) ConfirmTOTP(ctx context.Context, userID, code string) erro
 		return ErrInvalidTOTP
 	}
 
-	return s.repos.TOTP.Verify(ctx, userID)
+	if err := s.repos.TOTP.Verify(ctx, userID); err != nil {
+		return err
+	}
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:        ulid.Make().String(),
+		UserID:    &userID,
+		Action:    "totp_enabled",
+		CreatedAt: time.Now(),
+	})
+	return nil
 }
 
 func (s *authService) ValidateTOTP(ctx context.Context, userID, code string) (bool, error) {
@@ -324,6 +362,12 @@ func (s *authService) ForgotPassword(ctx context.Context, email string) error {
 	// A dedicated "password_reset_requested" action would need a schema migration.
 
 	slog.Info("password reset token generated", "userID", user.ID)
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:        ulid.Make().String(),
+		UserID:    &user.ID,
+		Action:    "password_reset_requested",
+		CreatedAt: time.Now(),
+	})
 	return nil
 }
 
@@ -366,9 +410,13 @@ func (s *authService) ResetPassword(ctx context.Context, token, newPassword stri
 	}
 
 	s.resetTokens.Delete(hash)
-
 	_ = s.repos.Sessions.DeleteByUserID(ctx, user.ID)
-
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:        ulid.Make().String(),
+		UserID:    &user.ID,
+		Action:    "password_reset",
+		CreatedAt: time.Now(),
+	})
 	return nil
 }
 
@@ -589,18 +637,18 @@ func (s *authService) RequestRegistration(ctx context.Context, username, email s
 }
 
 // ValidateSetupToken validates a pending_registration token and returns the setup data.
-func (s *authService) ValidateSetupToken(ctx context.Context, token string) (username, email, totpSecret, totpURI string, err error) {
+func (s *authService) ValidateSetupToken(ctx context.Context, token string) (username, email, totpSecret, totpURI, qrImage string, err error) {
 	pr, err := s.repos.PendingRegistrations.GetByTokenHash(ctx, hashToken(token))
 	if err != nil {
-		return "", "", "", "", ErrUnauthorized
+		return "", "", "", "", "", ErrUnauthorized
 	}
 	if pr.IsExpired() || pr.IsCompleted() {
-		return "", "", "", "", ErrUnauthorized
+		return "", "", "", "", "", ErrUnauthorized
 	}
 
 	plain, err := s.decryptAESGCM(pr.TOTPSecret)
 	if err != nil {
-		return "", "", "", "", fmt.Errorf("decrypt totp: %w", err)
+		return "", "", "", "", "", fmt.Errorf("decrypt totp: %w", err)
 	}
 	issuer := s.settings.TOTPIssuer(ctx).Value
 	uri := fmt.Sprintf(
@@ -608,7 +656,7 @@ func (s *authService) ValidateSetupToken(ctx context.Context, token string) (use
 		url.PathEscape(issuer), url.PathEscape(pr.Email),
 		string(plain), url.QueryEscape(issuer),
 	)
-	return pr.Username, pr.Email, string(plain), uri, nil
+	return pr.Username, pr.Email, string(plain), uri, totpQRImage(uri), nil
 }
 
 // CompleteSetup finalises a pending_registration: validates TOTP code, creates the user, and opens a session.
@@ -666,18 +714,18 @@ func (s *authService) CompleteSetup(ctx context.Context, token, password, totpCo
 }
 
 // PrepareInviteSetup generates (or reuses) a TOTP secret for an invite, stores username, returns setup data.
-func (s *authService) PrepareInviteSetup(ctx context.Context, inviteToken, username string) (email, totpSecret, totpURI string, err error) {
+func (s *authService) PrepareInviteSetup(ctx context.Context, inviteToken, username string) (email, totpSecret, totpURI, qrImage string, err error) {
 	inv, err := s.repos.Invitations.GetByTokenHash(ctx, hashToken(inviteToken))
 	if err != nil || inv.IsExpired() || inv.IsUsed() {
-		return "", "", "", ErrUnauthorized
+		return "", "", "", "", ErrUnauthorized
 	}
 
 	if len(username) < 2 || len(username) > 32 {
-		return "", "", "", fmt.Errorf("%w: username must be 2–32 characters", ErrInvalidInput)
+		return "", "", "", "", fmt.Errorf("%w: username must be 2–32 characters", ErrInvalidInput)
 	}
 	// Username uniqueness check.
 	if _, uerr := s.repos.Users.GetByUsername(ctx, username); uerr == nil {
-		return "", "", "", fmt.Errorf("%w: username already taken", ErrConflict)
+		return "", "", "", "", fmt.Errorf("%w: username already taken", ErrConflict)
 	}
 
 	var plain string
@@ -685,20 +733,20 @@ func (s *authService) PrepareInviteSetup(ctx context.Context, inviteToken, usern
 		// Already provisioned on a previous visit — reuse.
 		b, err := s.decryptAESGCM(inv.TOTPSecret)
 		if err != nil {
-			return "", "", "", fmt.Errorf("decrypt totp: %w", err)
+			return "", "", "", "", fmt.Errorf("decrypt totp: %w", err)
 		}
 		plain = string(b)
 	} else {
 		plain, err = generateTOTPSecret()
 		if err != nil {
-			return "", "", "", fmt.Errorf("generate totp secret: %w", err)
+			return "", "", "", "", fmt.Errorf("generate totp secret: %w", err)
 		}
 		encrypted, err := s.encryptAESGCM([]byte(plain))
 		if err != nil {
-			return "", "", "", fmt.Errorf("encrypt totp: %w", err)
+			return "", "", "", "", fmt.Errorf("encrypt totp: %w", err)
 		}
 		if err := s.repos.Invitations.SetTOTPAndUsername(ctx, inv.ID, encrypted, username); err != nil {
-			return "", "", "", fmt.Errorf("store totp: %w", err)
+			return "", "", "", "", fmt.Errorf("store totp: %w", err)
 		}
 	}
 
@@ -708,7 +756,20 @@ func (s *authService) PrepareInviteSetup(ctx context.Context, inviteToken, usern
 		url.PathEscape(issuer), url.PathEscape(inv.Email),
 		plain, url.QueryEscape(issuer),
 	)
-	return inv.Email, plain, uri, nil
+	return inv.Email, plain, uri, totpQRImage(uri), nil
+}
+
+// totpQRImage generates a QR code PNG for the given TOTP URI and returns it
+// as a base64-encoded data URI (data:image/png;base64,...). Returns "" on error.
+func totpQRImage(uri string) string {
+	var buf bytes.Buffer
+	png, err := qrcode.Encode(uri, qrcode.Medium, 200)
+	if err != nil {
+		slog.Warn("totp qr encode", "err", err)
+		return ""
+	}
+	buf.Write(png)
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
 }
 
 // CompleteInviteSetup finalises an invite-based registration.
@@ -747,6 +808,18 @@ func (s *authService) CompleteInviteSetup(ctx context.Context, inviteToken, pass
 	}
 	_ = s.repos.Invitations.MarkUsed(ctx, inv.ID, time.Now())
 
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:     ulid.Make().String(),
+		UserID: &user.ID,
+		Action: "registration_completed",
+		Metadata: map[string]any{
+			"username": user.Username,
+			"email":    user.Email,
+		},
+		IP:        ip,
+		CreatedAt: time.Now(),
+	})
+
 	sess, sessionToken, err := s.createSession(ctx, user.ID, ip, userAgent, false)
 	if err != nil {
 		return nil, "", err
@@ -763,5 +836,16 @@ func (s *authService) DeleteAccount(ctx context.Context, userID, password string
 	if !verifyPassword(password, user.Password) {
 		return ErrUnauthorized
 	}
+	// Log before deletion so the username survives in metadata (user_id becomes NULL after hard delete).
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:     ulid.Make().String(),
+		UserID: &userID,
+		Action: "account_deleted",
+		Metadata: map[string]any{
+			"username": user.Username,
+			"email":    user.Email,
+		},
+		CreatedAt: time.Now(),
+	})
 	return s.repos.Users.HardDelete(ctx, userID)
 }

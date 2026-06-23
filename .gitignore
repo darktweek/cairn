@@ -8,3 +8,6 @@ cairn-bin
 
 # Roadmap interne — ne pas publier
 cairn-spec.md
+
+# Overrides personnels Docker Compose (domaine, SMTP, Traefik…)
+compose.override.yaml

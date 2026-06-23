@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/darktweek/cairn/internal/service"
@@ -21,7 +22,7 @@ func (h *Handler) SSOConfig(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) SSOLogin(w http.ResponseWriter, r *http.Request) {
 	authURL, _, err := h.OIDC.AuthURL(r.Context())
 	if err != nil {
-		// Stay user-friendly: never dump a 500 on the login path.
+		slog.Error("sso: build auth URL", "err", err)
 		http.Redirect(w, r, "/?sso_error=unavailable", http.StatusFound)
 		return
 	}
@@ -32,6 +33,7 @@ func (h *Handler) SSOLogin(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) SSOCallback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if e := q.Get("error"); e != "" {
+		slog.Warn("sso: provider returned error", "error", e, "description", q.Get("error_description"))
 		http.Redirect(w, r, "/?sso_error="+e, http.StatusFound)
 		return
 	}
@@ -40,18 +42,21 @@ func (h *Handler) SSOCallback(w http.ResponseWriter, r *http.Request) {
 
 	claims, err := h.OIDC.Exchange(r.Context(), state, code)
 	if err != nil {
+		slog.Error("sso: exchange failed", "err", err)
 		http.Redirect(w, r, "/?sso_error=exchange", http.StatusFound)
 		return
 	}
 
 	user, err := h.User.ProvisionSSO(r.Context(), claims.Email, claims.Username, claims.Name, clientIP(r), r.UserAgent())
 	if err != nil {
+		slog.Error("sso: provision failed", "email", claims.Email, "err", err)
 		http.Redirect(w, r, "/?sso_error=provision", http.StatusFound)
 		return
 	}
 
 	_, token, err := h.Auth.CreateSessionForUser(r.Context(), user.ID, clientIP(r), r.UserAgent())
 	if err != nil {
+		slog.Error("sso: create session failed", "userID", user.ID, "err", err)
 		http.Redirect(w, r, "/?sso_error=session", http.StatusFound)
 		return
 	}

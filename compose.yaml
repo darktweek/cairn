@@ -2,7 +2,7 @@ name: cairn
 
 services:
   cairn:
-    # Pas d'image publiée — l'image est construite localement depuis ce repo.
+    # No published image — the image is built locally from this repo.
     build: .
     image: cairn:latest
     container_name: cairn
@@ -14,54 +14,54 @@ services:
       - ALL
     read_only: true
     tmpfs:
-      # Doit être >= au plus grand upload autorisé (spool multipart temporaire).
+      # Must be >= the largest allowed upload (multipart spool).
       - /tmp:size=256m,mode=1777
 
     volumes:
       - cairn_data:/data
 
     environment:
-      CAIRN_ADDR:                       ":8080"
-      CAIRN_ENV:                        "production"
-      CAIRN_BASE_URL:                   "http://localhost:8080"  # changer en https://... pour la prod
-      CAIRN_DB_PATH:                    "/data/db.sqlite"
-      CAIRN_MEDIA_PATH:                 "/data/media"
-      CAIRN_MAX_UPLOAD_SIZE:            "52428800"   # 50 Mo — taille max d'un fichier (override par user possible)
-      CAIRN_STORAGE_QUOTA:              "209715200"  # 200 Mo — stockage total par user (override par user possible)
-      CAIRN_TRUSTED_PROXY:              "true"
-      # Réglages applicatifs — laissés non définis ici pour rester éditables
-      # depuis Admin → Réglages → Système. Décommenter pour verrouiller.
+      CAIRN_ADDR:            ":8080"
+      CAIRN_ENV:             "production"
+      CAIRN_BASE_URL:        "http://localhost:8080"    # set to your public URL in production
+      CAIRN_DB_PATH:         "/data/db.sqlite"
+      CAIRN_MEDIA_PATH:      "/data/media"
+      CAIRN_MAX_UPLOAD_SIZE: "52428800"   # 50 MB — max single file size (per-user override available)
+      CAIRN_STORAGE_QUOTA:   "209715200"  # 200 MB — total media per user (per-user override available)
+      CAIRN_TRUSTED_PROXY:   "true"       # set to "false" if not behind a reverse proxy
+
+      # Application settings — leave unset here to keep them editable from
+      # Admin → Settings → System. Uncomment to lock them via environment.
       # CAIRN_TOTP_ISSUER:                "Cairn"
       # CAIRN_DEFAULT_WALLPAPER_LIMIT:    "10"
       # CAIRN_BOOKMARKLET_TOKEN_LIFETIME: "90"
-      # Email (SMTP) — laissé non défini : à configurer via le setup web
-      # (Admin → Réglages → Système → Email). Décommenter pour verrouiller.
-      # CAIRN_SMTP_HOST:                  "smtp.example.com"
-      # CAIRN_SMTP_PORT:                  "587"
-      # CAIRN_SMTP_FROM:                  "cairn@example.com"
-      # CAIRN_SMTP_TLS:                   "true"
-      # Menu — bang qui ouvre le hub plein écran. Vide = éditable dans l'admin (défaut !menu).
-      # CAIRN_MENU_BANG:                "!menu"
-      # SSO / OIDC — décommenter pour verrouiller la config via le compose.
-      # Sinon, configurable depuis l'admin → Réglages → SSO.
-      # Redirect URI à déclarer côté provider : <BASE_URL>/api/auth/sso/callback
-      # CAIRN_OIDC_PROVIDER_NAME:       "Authentik"
-      # CAIRN_OIDC_ISSUER:              "https://auth.example.com/application/o/cairn/"
-      # CAIRN_OIDC_CLIENT_ID:           "cairn"
-      # CAIRN_OIDC_SCOPES:              "openid profile email"
+
+      # SMTP — leave unset to configure via the admin UI (Admin → Settings → System → Email).
+      # Uncomment and fill in to lock the configuration via environment.
+      # CAIRN_SMTP_HOST: "smtp.example.com"
+      # CAIRN_SMTP_PORT: "587"              # 465 = implicit TLS/SMTPS, 587 = STARTTLS
+      # CAIRN_SMTP_FROM: "cairn@example.com"
+      # CAIRN_SMTP_TLS:  "true"
+
+      # Menu bang — opens the full-screen hub. Leave unset to keep it editable in admin (default: !menu).
+      # CAIRN_MENU_BANG: "!menu"
+
+      # SSO / OIDC — uncomment to lock the config via compose.
+      # Otherwise configurable from Admin → Settings → SSO.
+      # Redirect URI to register with your provider: <BASE_URL>/api/auth/sso/callback
+      # CAIRN_OIDC_PROVIDER_NAME:  "SSO"
+      # CAIRN_OIDC_ISSUER:         "https://auth.example.com/application/o/cairn/"
+      # CAIRN_OIDC_CLIENT_ID:      "cairn"
+      # CAIRN_OIDC_SCOPES:         "openid profile email"
 
     env_file:
-      - .env  # CAIRN_SESSION_SECRET (requis) ; CAIRN_SMTP_USER/PASS et CAIRN_OIDC_CLIENT_SECRET si verrouillés via compose
+      - .env  # Required: CAIRN_SESSION_SECRET — also put CAIRN_SMTP_USER/PASS and CAIRN_OIDC_CLIENT_SECRET here
 
-    networks:
-      - traefik_proxy
-
-    labels:
-      traefik.enable: "true"
-      traefik.http.routers.cairn.rule: "Host(`go.dotnot.be`)"
-      traefik.http.routers.cairn.entrypoints: "websecure"
-      traefik.http.routers.cairn.tls.certresolver: "cloudflare"
-      traefik.http.services.cairn.loadbalancer.server.port: "8080"
+    # Port exposure — for standalone/local use only.
+    # When using a reverse proxy (Traefik, Nginx…), add the proxy network in
+    # compose.override.yaml instead and leave this commented out.
+    # ports:
+    #   - "8080:8080"
 
     healthcheck:
       test: ["CMD", "/cairn", "healthcheck"]
@@ -70,14 +70,6 @@ services:
       retries: 3
       start_period: 10s
 
-    ports:
-      - "8080:8080"
-
 volumes:
   cairn_data:
     driver: local
-
-networks:
-  traefik_proxy:
-    external: true
-    name: traefik_proxy

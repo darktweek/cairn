@@ -27,13 +27,6 @@
     <div class="login-card">
       <h1 class="login-title">Cairn</h1>
 
-      <div id="sso-block" class="hidden">
-        <a id="sso-btn" class="btn btn-primary btn-full" href="/api/auth/sso/login">
-          <span data-i18n="login.sso">Sign in with SSO</span> <span id="sso-provider"></span>
-        </a>
-        <div class="sso-divider"><span data-i18n="login.or">or</span></div>
-      </div>
-
       <form id="login-form" novalidate>
         <div class="form-group">
           <label class="form-label" for="login-email" data-i18n="login.identifier">Email or username</label>
@@ -53,6 +46,11 @@
         <div id="login-error" class="error-msg"></div>
         <button type="submit" class="btn btn-primary btn-full" data-i18n="login.submit">Sign in</button>
       </form>
+
+      <div id="sso-block" class="hidden">
+        <div class="sso-divider"><span data-i18n="login.or">or</span></div>
+        <a id="sso-btn" class="btn btn-secondary btn-full" href="/api/auth/sso/login"></a>
+      </div>
 
       <form id="forgot-form" class="hidden" novalidate>
         <p class="text-sm text-dim text-center" data-i18n="forgot.hint">Enter your email and we'll send a reset link.</p>

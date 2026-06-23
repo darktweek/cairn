@@ -38,12 +38,13 @@ Type `!menu` (or your configured bang) for the full-screen hub.
 | **Search** | DuckDuckGo by default — Google, Brave, Bing, Kagi, or custom URL |
 | **Bangs** | `!bm` bookmarks, `!g` Google, `!yt` YouTube, `!gh` GitHub, `!hub` full menu, + all DDG bangs |
 | **Bookmarks** | Folders, tags, import/export Netscape format (Chrome/Firefox/Safari/Edge), mobile bookmarklet |
-| **TOTP / 2FA** | Optional, RFC 6238, works with any authenticator app |
+| **TOTP / 2FA** | Mandatory on account creation — RFC 6238, server-generated QR code, works with any authenticator app |
 | **Multi-user** | First account created becomes admin automatically |
-| **Invitations** | Admin sends invite links; open registration toggle |
+| **Invitations** | Admin sends invite links by email with delivery confirmation; open registration toggle |
 | **SSO / OIDC** | OpenID Connect (Authentik, Keycloak, Authelia, Google…) — JIT account provisioning |
-| **Admin panel** | User management, storage quotas, upload limits, audit log, pending registrations |
-| **Email** | Account setup emails, SMTP configurable via env or admin UI |
+| **Admin panel** | User management, storage quotas, upload limits, SMTP test, audit log, pending registrations |
+| **Email** | Account setup & invitation emails; SMTP supports implicit TLS (port 465) and STARTTLS (port 587); configurable via env or admin UI |
+| **Audit log** | All security and admin actions logged and attributed to users; GDPR-compliant (no personal content logged, metadata preserved on account deletion) |
 
 ---
 
@@ -83,28 +84,35 @@ CAIRN_SMTP_PASS=your-smtp-password
 > **No SMTP?** You can skip SMTP for a first test — just know that invitation emails won't send.  
 > Set `CAIRN_SMTP_HOST` to a dummy value and create users manually via the admin panel.
 
-### Step 3 — Edit `compose.yaml`
+### Step 3 — Create your `compose.override.yaml`
 
-Open `compose.yaml` and update these three lines to match your setup:
+`compose.yaml` is the public, generic base. Your personal settings (domain, SMTP, reverse proxy labels) go in `compose.override.yaml` — Docker Compose merges it automatically, and it is gitignored so it never gets committed.
 
-```yaml
-CAIRN_BASE_URL:  "http://localhost:8080"   # or your public URL if self-hosting
-CAIRN_SMTP_HOST: "smtp.example.com"
-CAIRN_SMTP_FROM: "cairn@example.com"
+Copy the example and adapt it:
+
+```bash
+cp compose.override.yaml.example compose.override.yaml
 ```
 
-For local testing, `http://localhost:8080` is fine.
+**For local / standalone use** (no reverse proxy), the example already adds `ports: - "8080:8080"` — just set your base URL:
+
+```yaml
+# compose.override.yaml
+services:
+  cairn:
+    ports:
+      - "8080:8080"
+    environment:
+      CAIRN_BASE_URL: "http://localhost:8080"
+```
+
+**For production behind a reverse proxy** (Traefik, Nginx…), remove the `ports` block and add your proxy config instead (see the example file for Traefik labels).
 
 ### Step 4 — Build & start
 
 There is no published Docker image (yet) — the image is **built locally from this repo**, automatically:
 
 ```bash
-# One-time: the default compose file expects this network (used for Traefik).
-# Create it even if you don't use Traefik, or remove the networks/labels
-# sections from compose.yaml.
-docker network create traefik_proxy
-
 docker compose up -d --build
 ```
 
@@ -167,9 +175,10 @@ Per-user overrides for both limits are available in the admin panel.
 | `CAIRN_SMTP_USER` | — | **yes** | SMTP username |
 | `CAIRN_SMTP_PASS` | — | **yes** | SMTP password |
 | `CAIRN_SMTP_FROM` | — | **yes** | Sender address |
-| `CAIRN_SMTP_TLS` | `true` | no | Enable STARTTLS |
+| `CAIRN_SMTP_TLS` | `true` | no | Enable TLS (port 465 = implicit TLS/SMTPS; other ports = STARTTLS) |
 
-SMTP can also be configured entirely from the admin UI if not set via environment.
+SMTP can also be configured entirely from the admin UI if not set via environment.  
+Use the **Test** button in Admin → Settings → SMTP to verify delivery before sending real invitations.
 
 ### SSO / OpenID Connect (optional)
 
@@ -186,6 +195,8 @@ SMTP can also be configured entirely from the admin UI if not set via environmen
 <CAIRN_BASE_URL>/api/auth/sso/callback
 ```
 
+**Provisioning:** accounts are created automatically on first SSO login (JIT). Any user who can authenticate with your provider will get a Cairn account — restrict access at the provider level (groups, policies) if needed. Existing accounts are matched by email.
+
 ### Misc
 
 | Variable | Default | Description |
@@ -199,19 +210,31 @@ SMTP can also be configured entirely from the admin UI if not set via environmen
 
 ## Behind a reverse proxy
 
-### Traefik + Cloudflare Tunnel
+Put your reverse proxy config in `compose.override.yaml` (gitignored) so it never pollutes the public file.
 
-`compose.yaml` includes Traefik labels ready to use. Update `Host(...)` to your domain:
+### Traefik
 
 ```yaml
-labels:
-  traefik.enable: "true"
-  traefik.http.routers.cairn.rule: "Host(`start.example.com`)"
-  traefik.http.routers.cairn.entrypoints: "websecure"
-  traefik.http.routers.cairn.tls.certresolver: "cloudflare"
+# compose.override.yaml
+services:
+  cairn:
+    environment:
+      CAIRN_BASE_URL: "https://start.example.com"
+    networks:
+      - traefik_proxy
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.cairn.rule: "Host(`start.example.com`)"
+      traefik.http.routers.cairn.entrypoints: "websecure"
+      traefik.http.routers.cairn.tls.certresolver: "cloudflare"
+      traefik.http.services.cairn.loadbalancer.server.port: "8080"
+
+networks:
+  traefik_proxy:
+    external: true
 ```
 
-Set `CAIRN_TRUSTED_PROXY=true` so client IPs are read correctly from `CF-Connecting-IP`.
+Set `CAIRN_TRUSTED_PROXY=true` (already the default) so client IPs are read correctly from `CF-Connecting-IP` / `X-Forwarded-For`.
 
 ### Nginx
 
@@ -222,6 +245,8 @@ location / {
     proxy_set_header   X-Forwarded-For   $remote_addr;
 }
 ```
+
+Add `ports: - "8080:8080"` in your `compose.override.yaml` when using Nginx with host-network routing.
 
 ---
 
@@ -305,12 +330,15 @@ cairn/
 |---|---|
 | Passwords | Argon2id (time=1, memory=64 MB, threads=4) |
 | Sessions | SHA-256 hashed tokens, `HttpOnly` + `Secure` + `SameSite=Strict` cookies |
-| TOTP | RFC 6238, secrets encrypted AES-256-GCM at rest |
-| Rate limiting | Sliding window per hashed IP, in-memory |
+| TOTP | Mandatory on signup — RFC 6238, server-generated QR code, secrets encrypted AES-256-GCM at rest |
+| Rate limiting | Two-layer: per-account (10/5 min) + per-IP fallback (30/5 min) |
 | User isolation | `userID` checked on every repository call; media served behind auth |
 | Uploads | Magic bytes validated, server-generated filenames |
 | Container | `scratch` base, read-only FS, `no-new-privileges`, `CAP_DROP ALL` |
 | HTTP headers | CSP, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy` |
+| Audit log | All security events logged (login, logout, password change, TOTP, account lifecycle, admin actions) |
+| GDPR | Hard delete purges all user data and media; audit entries retain username in metadata, `user_id` set to NULL |
+| Email TLS | Port 465 → implicit TLS (SMTPS); port 587 → STARTTLS upgrade |
 
 ---
 
@@ -323,6 +351,7 @@ cairn/
 | Database | SQLite (WAL mode) |
 | SQLite driver | modernc.org/sqlite (pure Go, zero CGO) |
 | Migrations | goose (embedded) |
+| QR code | skip2/go-qrcode (server-side PNG for TOTP setup) |
 | Docker image | `scratch` (~5 MB) |
 | Frontend | Vanilla JS, zero dependencies |
 

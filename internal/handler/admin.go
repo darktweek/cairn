@@ -277,6 +277,17 @@ func (h *Handler) AdminGetUserStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// AdminTestSMTP — POST /api/admin/settings/smtp/test
+// Sends a test email to the logged-in admin's address to verify SMTP settings.
+func (h *Handler) AdminTestSMTP(w http.ResponseWriter, r *http.Request) {
+	admin := middleware.UserFromCtx(r.Context())
+	if err := h.Admin.TestSMTP(r.Context(), admin.ID, admin.Email); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "to": admin.Email})
+}
+
 func (h *Handler) AdminGetStats(w http.ResponseWriter, r *http.Request) {
 	stats, err := h.Admin.GetStats(r.Context())
 	if err != nil {

@@ -67,7 +67,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	sess := middleware.SessionFromCtx(r.Context())
 	if sess != nil {
-		_ = h.Auth.Logout(r.Context(), sess.ID)
+		_ = h.Auth.Logout(r.Context(), sess.ID, sess.UserID)
 	}
 	h.clearSessionCookie(w)
 	w.WriteHeader(http.StatusNoContent)

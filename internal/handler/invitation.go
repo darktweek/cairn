@@ -33,7 +33,7 @@ func (h *Handler) RequestRegistration(w http.ResponseWriter, r *http.Request) {
 // Returns {username, email, totp_secret, totp_uri} so the frontend can show a QR code.
 func (h *Handler) ValidateSetupToken(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
-	username, email, totpSecret, totpURI, err := h.Auth.ValidateSetupToken(r.Context(), token)
+	username, email, totpSecret, totpURI, qrImage, err := h.Auth.ValidateSetupToken(r.Context(), token)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -43,6 +43,7 @@ func (h *Handler) ValidateSetupToken(w http.ResponseWriter, r *http.Request) {
 		"email":       email,
 		"totp_secret": totpSecret,
 		"totp_uri":    totpURI,
+		"qr_image":    qrImage,
 	})
 }
 
@@ -78,7 +79,7 @@ func (h *Handler) PrepareInviteSetup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, fmt.Errorf("%w: invalid JSON", service.ErrInvalidInput))
 		return
 	}
-	email, totpSecret, totpURI, err := h.Auth.PrepareInviteSetup(r.Context(), inviteToken, body.Username)
+	email, totpSecret, totpURI, qrImage, err := h.Auth.PrepareInviteSetup(r.Context(), inviteToken, body.Username)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -87,6 +88,7 @@ func (h *Handler) PrepareInviteSetup(w http.ResponseWriter, r *http.Request) {
 		"email":       email,
 		"totp_secret": totpSecret,
 		"totp_uri":    totpURI,
+		"qr_image":    qrImage,
 	})
 }
 
@@ -244,12 +246,14 @@ func (h *Handler) AdminCreateInvitation(w http.ResponseWriter, r *http.Request) 
 		writeError(w, fmt.Errorf("%w: invalid JSON", service.ErrInvalidInput))
 		return
 	}
-	inv, _, err := h.Invitation.Create(r.Context(), admin.ID, body.Email)
+	inv, _, emailSent, err := h.Invitation.Create(r.Context(), admin.ID, body.Email)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, fmtInvitation(inv))
+	out := fmtInvitation(inv)
+	out["email_sent"] = emailSent
+	writeJSON(w, http.StatusCreated, out)
 }
 
 // AdminListInvitations — GET /api/admin/invitations
@@ -281,11 +285,12 @@ func (h *Handler) AdminRevokeInvitation(w http.ResponseWriter, r *http.Request) 
 func (h *Handler) AdminResendInvitation(w http.ResponseWriter, r *http.Request) {
 	admin := middleware.UserFromCtx(r.Context())
 	id := chi.URLParam(r, "id")
-	if _, err := h.Invitation.Resend(r.Context(), id, admin.ID); err != nil {
+	_, emailSent, err := h.Invitation.Resend(r.Context(), id, admin.ID)
+	if err != nil {
 		writeError(w, err)
 		return
 	}
-	// Return updated invitation.
+	// Return updated invitation with email delivery status.
 	invs, err := h.Invitation.List(r.Context())
 	if err != nil {
 		writeError(w, err)
@@ -293,11 +298,13 @@ func (h *Handler) AdminResendInvitation(w http.ResponseWriter, r *http.Request) 
 	}
 	for _, inv := range invs {
 		if inv.ID == id {
-			writeJSON(w, http.StatusOK, fmtInvitation(inv))
+			out := fmtInvitation(inv)
+			out["email_sent"] = emailSent
+			writeJSON(w, http.StatusOK, out)
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "email_sent": emailSent})
 }
 
 func fmtInvitation(inv *model.Invitation) map[string]any {

@@ -26,7 +26,7 @@ func New(repos *repository.Repositories, cfg *config.Config) *Services {
 		User:       newUserService(repos, cfg),
 		Bookmark:   newBookmarkService(repos, cfg, auth),
 		Wallpaper:  newWallpaperService(repos, cfg, settings),
-		Admin:      newAdminService(repos, cfg),
+		Admin:      newAdminService(repos, cfg, email),
 		Email:      email,
 		Invitation: newInvitationService(repos, cfg, email),
 		Settings:   settings,

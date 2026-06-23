@@ -1,0 +1,41 @@
+# Personal overrides — copy to compose.override.yaml (gitignored) and adapt.
+# Docker Compose merges this file automatically with compose.yaml on every run.
+# Use it to add your domain, reverse proxy labels, and locked SMTP/SSO settings
+# without touching the public compose.yaml.
+
+name: cairn
+
+services:
+  cairn:
+    # Standalone / local use: expose port directly.
+    # Remove this block if using a reverse proxy.
+    ports:
+      - "8080:8080"
+
+    environment:
+      CAIRN_BASE_URL: "https://start.example.com"
+
+      # Lock SMTP via compose instead of the admin UI:
+      # CAIRN_SMTP_HOST: "smtp.example.com"
+      # CAIRN_SMTP_PORT: "465"    # 465 = implicit TLS/SMTPS, 587 = STARTTLS
+      # CAIRN_SMTP_FROM: "cairn@example.com"
+      # CAIRN_SMTP_TLS:  "true"
+
+      # Lock SSO via compose instead of the admin UI:
+      # CAIRN_OIDC_PROVIDER_NAME: "Authentik"
+      # CAIRN_OIDC_ISSUER:        "https://auth.example.com/application/o/cairn/"
+      # CAIRN_OIDC_CLIENT_ID:     "cairn"
+
+    # Example: Traefik labels
+    networks:
+      - traefik_proxy
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.cairn.rule: "Host(`start.example.com`)"
+      traefik.http.routers.cairn.entrypoints: "websecure"
+      traefik.http.routers.cairn.tls.certresolver: "cloudflare"
+      traefik.http.services.cairn.loadbalancer.server.port: "8080"
+
+networks:
+  traefik_proxy:
+    external: true

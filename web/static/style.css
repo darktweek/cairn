@@ -1364,7 +1364,9 @@ body.searching #date-line {
 /* ── Setup / Account creation ───────────────────────── */
 .setup-qr {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
   margin: 0.75rem 0 0.25rem;
 }
 .setup-qr canvas {

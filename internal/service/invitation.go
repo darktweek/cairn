@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"time"
 
@@ -19,12 +20,14 @@ type InvitationService interface {
 	SetOpenRegistration(ctx context.Context, open bool) error
 
 	// Invitations
-	Create(ctx context.Context, adminID, email string) (*model.Invitation, string, error)
+	// Create returns the invitation, the raw token, whether the email was sent, and any error.
+	Create(ctx context.Context, adminID, email string) (*model.Invitation, string, bool, error)
 	Validate(ctx context.Context, token string) (*model.Invitation, error)
 	Consume(ctx context.Context, token string) (*model.Invitation, error)
 	List(ctx context.Context) ([]*model.Invitation, error)
 	Revoke(ctx context.Context, adminID, id string) error
-	Resend(ctx context.Context, id, adminID string) (string, error)
+	// Resend returns the new raw token, whether the email was sent, and any error.
+	Resend(ctx context.Context, id, adminID string) (string, bool, error)
 }
 
 type invitationService struct {
@@ -53,14 +56,14 @@ func (s *invitationService) SetOpenRegistration(ctx context.Context, open bool) 
 	return s.repos.Settings.Set(ctx, "open_registration", v)
 }
 
-func (s *invitationService) Create(ctx context.Context, adminID, email string) (*model.Invitation, string, error) {
+func (s *invitationService) Create(ctx context.Context, adminID, email string) (*model.Invitation, string, bool, error) {
 	if email == "" {
-		return nil, "", fmt.Errorf("%w: email required", ErrInvalidInput)
+		return nil, "", false, fmt.Errorf("%w: email required", ErrInvalidInput)
 	}
 
 	raw, hash, err := generateInviteToken()
 	if err != nil {
-		return nil, "", err
+		return nil, "", false, err
 	}
 
 	inv := &model.Invitation{
@@ -72,24 +75,35 @@ func (s *invitationService) Create(ctx context.Context, adminID, email string) (
 		CreatedAt: time.Now(),
 	}
 	if err := s.repos.Invitations.Create(ctx, inv); err != nil {
-		return nil, "", err
+		return nil, "", false, err
 	}
 
 	link := fmt.Sprintf("%s/?invite=%s", s.cfg.BaseURL, raw)
+	emailSent := false
 	if err := s.email.SendInvitation(ctx, email, link, inv.ExpiresAt); err != nil {
-		// non-fatal: admin can resend
-		_ = err
+		if !errors.Is(err, ErrSMTPNotConfigured) {
+			// SMTP is configured but delivery failed — worth logging.
+			_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+				ID:        ulid.Make().String(),
+				UserID:    &adminID,
+				Action:    "email_failed",
+				Metadata:  map[string]any{"email": email, "reason": "invitation"},
+				CreatedAt: time.Now(),
+			})
+		}
+	} else {
+		emailSent = true
 	}
 
 	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
 		ID:        ulid.Make().String(),
 		UserID:    &adminID,
 		Action:    "invitation_sent",
-		Metadata:  map[string]any{"email": email},
+		Metadata:  map[string]any{"email": email, "email_sent": emailSent},
 		CreatedAt: time.Now(),
 	})
 
-	return inv, raw, nil
+	return inv, raw, emailSent, nil
 }
 
 func (s *invitationService) Validate(ctx context.Context, token string) (*model.Invitation, error) {
@@ -138,39 +152,58 @@ func (s *invitationService) Revoke(ctx context.Context, adminID, id string) erro
 	return nil
 }
 
-func (s *invitationService) Resend(ctx context.Context, id, adminID string) (string, error) {
+func (s *invitationService) Resend(ctx context.Context, id, adminID string) (string, bool, error) {
 	inv, err := s.repos.Invitations.GetByID(ctx, id)
 	if err != nil {
-		return "", ErrNotFound
+		return "", false, ErrNotFound
 	}
 	if inv.IsUsed() {
-		return "", fmt.Errorf("%w: invitation already used", ErrInvalidInput)
+		return "", false, fmt.Errorf("%w: invitation already used", ErrInvalidInput)
 	}
 
 	// Generate a fresh token and extend expiry.
 	raw, hash, err := generateInviteToken()
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	inv.TokenHash = hash
 	inv.ExpiresAt = time.Now().Add(time.Duration(s.cfg.InviteLifetime) * time.Hour)
 
 	// Delete + recreate to update token_hash (simpler than UPDATE with UNIQUE).
 	if err := s.repos.Invitations.Delete(ctx, id); err != nil {
-		return "", err
+		return "", false, err
 	}
 	inv.CreatedBy = adminID
 	inv.CreatedAt = time.Now()
 	if err := s.repos.Invitations.Create(ctx, inv); err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	link := fmt.Sprintf("%s/?invite=%s", s.cfg.BaseURL, raw)
+	emailSent := false
 	if err := s.email.SendInvitation(ctx, inv.Email, link, inv.ExpiresAt); err != nil {
-		_ = err
+		if !errors.Is(err, ErrSMTPNotConfigured) {
+			_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+				ID:        ulid.Make().String(),
+				UserID:    &adminID,
+				Action:    "email_failed",
+				Metadata:  map[string]any{"email": inv.Email, "reason": "invitation_resend"},
+				CreatedAt: time.Now(),
+			})
+		}
+	} else {
+		emailSent = true
 	}
 
-	return raw, nil
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:        ulid.Make().String(),
+		UserID:    &adminID,
+		Action:    "invitation_resent",
+		Metadata:  map[string]any{"email": inv.Email, "email_sent": emailSent},
+		CreatedAt: time.Now(),
+	})
+
+	return raw, emailSent, nil
 }
 
 func generateInviteToken() (raw, hash string, err error) {

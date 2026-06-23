@@ -292,7 +292,16 @@ func (s *userService) UpdateProfile(ctx context.Context, userID, username, email
 	user.Email = strings.ToLower(email)
 	user.UpdatedAt = time.Now()
 
-	return s.repos.Users.Update(ctx, user)
+	if err := s.repos.Users.Update(ctx, user); err != nil {
+		return err
+	}
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:        ulid.Make().String(),
+		UserID:    &userID,
+		Action:    "profile_updated",
+		CreatedAt: time.Now(),
+	})
+	return nil
 }
 
 func (s *userService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error {

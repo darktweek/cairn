@@ -603,7 +603,6 @@ async function handleLogin(e) {
     if (err.code === 'TOTP_REQUIRED') {
       show('totp-group');
       $('login-totp').focus();
-      setError('login-error', 'Code TOTP requis');
     } else if (err.status === 429) {
       setError('login-error', t('login.ratelimited'));
     } else {
@@ -651,6 +650,9 @@ function showLoginForm() {
   hide('register-form');
   show('login-links');
   show('login-form');
+  hide('totp-group');
+  $('login-totp').value = '';
+  setError('login-error', '');
   setError('forgot-msg', '');
 }
 
@@ -1311,8 +1313,17 @@ function buildTOTPSection() {
       wrap.innerHTML = '';
 
       const qrWrap = el('div', 'totp-qr-wrap');
-      const info   = el('p', 'text-sm text-dim', 'Scannez ce lien avec votre app authenticator :');
-      const qrLink = el('div', 'totp-qr-link', res.qr_url);
+      // QR image if server provided it, otherwise fallback to open-in-app link
+      if (res.qr_image) {
+        const img = document.createElement('img');
+        img.src = res.qr_image;
+        img.alt = 'QR code TOTP';
+        img.style.cssText = 'width:180px;height:180px;border-radius:8px';
+        qrWrap.appendChild(img);
+      }
+      const openLink = el('a', 'btn btn-secondary btn-sm', '📱 ' + t('setup.open.app'));
+      openLink.href = res.qr_url;
+      qrWrap.appendChild(openLink);
       const code   = el('input', 'form-input');
       code.placeholder = 'Code à 6 chiffres pour confirmer';
       code.inputMode   = 'numeric';
@@ -1327,7 +1338,7 @@ function buildTOTPSection() {
           wrap.appendChild(buildDisableTOTPBtn());
         } catch (e) { errEl.textContent = e.message; }
       };
-      qrWrap.append(info, qrLink, code, errEl, confBtn);
+      qrWrap.append(code, errEl, confBtn);
       wrap.append(qrWrap, buildDisableTOTPBtn());
     } catch (e) {
       configBtn.disabled = false;
@@ -1802,7 +1813,8 @@ function buildAdminAudit() {
       const row    = el('div', 'audit-row');
       const action = el('span', 'audit-action', auditLabel(e.action));
       const ip     = el('span', 'audit-ip', e.ip || '—');
-      const user   = el('span', 'audit-user', e.username || (e.user_id ? '—' : 'system'));
+      const resolvedName = e.username || (e.metadata && e.metadata.username ? e.metadata.username + ' [' + t('audit.deleted') + ']' : null);
+      const user   = el('span', 'audit-user', resolvedName || (e.user_id ? '—' : 'system'));
       const time   = el('span', 'audit-time',
         new Date(e.created_at * 1000).toLocaleString(_locale, { dateStyle: 'short', timeStyle: 'short' }));
       row.append(action, ip, user, time);
@@ -1977,8 +1989,29 @@ function buildAdminSystem() {
     } catch (e) { smtpMsg.className = 'error-msg'; smtpMsg.textContent = e.message; }
   };
 
+  const smtpTestBtn = el('button', 'btn btn-secondary', t('admin.smtp.test'));
+  smtpTestBtn.style.marginLeft = '0.5rem';
+  smtpTestBtn.onclick = async () => {
+    smtpMsg.className = 'error-msg'; smtpMsg.textContent = '';
+    smtpTestBtn.disabled = true;
+    smtpTestBtn.textContent = t('admin.smtp.test.sending');
+    try {
+      const r = await POST('/admin/settings/smtp/test', {});
+      smtpMsg.className = 'text-sm'; smtpMsg.style.color = 'var(--success)';
+      smtpMsg.textContent = t('admin.smtp.test.ok').replace('{email}', r.to);
+    } catch (e) {
+      smtpMsg.className = 'error-msg'; smtpMsg.textContent = t('admin.smtp.test.fail') + ' — ' + e.message;
+    } finally {
+      smtpTestBtn.disabled = false;
+      smtpTestBtn.textContent = t('admin.smtp.test');
+    }
+  };
+
+  const smtpBtnRow = el('div', 'flex gap-1');
+  smtpBtnRow.append(smtpSaveBtn, smtpTestBtn);
+
   smtpWrap.append(el('div','settings-section-title', t('admin.section.smtp')), smtpStatus,
-    fHost.g, fPort.g, fUser.g, fPass.g, fFrom.g, fTls.g, smtpSaveBtn, smtpMsg);
+    fHost.g, fPort.g, fUser.g, fPass.g, fFrom.g, fTls.g, smtpBtnRow, smtpMsg);
 
   wrap.append(fTotp.g, fWp.g, fBm.g, saveBtn, msg, smtpWrap, roWrap);
   return wrap;
@@ -2145,12 +2178,20 @@ function buildAdminInvitations() {
   form.append(emailInput, inviteBtn);
 
   inviteBtn.onclick = async () => {
-    inviteErr.textContent = '';
+    inviteErr.className = 'error-msg'; inviteErr.textContent = '';
     try {
-      await POST('/admin/invitations', { email: emailInput.value.trim() });
+      const r = await POST('/admin/invitations', { email: emailInput.value.trim() });
       emailInput.value = '';
+      // Show email delivery feedback before refreshing the list.
+      if (r.email_sent) {
+        inviteErr.className = 'text-sm'; inviteErr.style.color = 'var(--success)';
+        inviteErr.textContent = t('admin.inv.email_sent');
+      } else {
+        inviteErr.className = 'text-sm'; inviteErr.style.color = 'var(--warning, #f0a500)';
+        inviteErr.textContent = t('admin.inv.email_not_sent');
+      }
       renderAdminTab('invitations');
-    } catch (e) { inviteErr.textContent = e.message; }
+    } catch (e) { inviteErr.className = 'error-msg'; inviteErr.textContent = e.message; }
   };
 
   // Invitation list
@@ -2180,8 +2221,21 @@ function buildAdminInvitations() {
       if (inv.pending) {
         const resendBtn = el('button', 'btn btn-small btn-secondary', t('admin.inv.resend'));
         resendBtn.onclick = async () => {
-          try { await POST(`/admin/invitations/${inv.id}/resend`); renderAdminTab('invitations'); }
-          catch (e) { alert(e.message); }
+          resendBtn.disabled = true;
+          try {
+            const r = await POST(`/admin/invitations/${inv.id}/resend`);
+            const fb = el('span', 'text-sm');
+            if (r.email_sent) {
+              fb.style.color = 'var(--success)'; fb.textContent = ' ✓ ' + t('admin.inv.email_sent');
+            } else {
+              fb.style.color = 'var(--warning, #f0a500)'; fb.textContent = ' ⚠ ' + t('admin.inv.email_not_sent');
+            }
+            acts.appendChild(fb);
+            setTimeout(() => renderAdminTab('invitations'), 2000);
+          } catch (e) {
+            resendBtn.disabled = false;
+            alert(e.message);
+          }
         };
         acts.appendChild(resendBtn);
       }
@@ -2228,7 +2282,8 @@ async function checkSSO() {
   try {
     const cfg = await GET('/auth/sso/config');
     if (cfg.enabled) {
-      $('sso-provider').textContent = cfg.provider_name || 'SSO';
+      const name = cfg.provider_name || 'SSO';
+      $('sso-btn').textContent = t('login.sso').replace('{provider}', name);
       show('sso-block');
     }
   } catch { /* SSO not configured — ignore */ }
@@ -2243,20 +2298,32 @@ async function checkPublicConfig() {
 }
 
 /* ─── Setup page (invite token or pending-registration token) ─────────────── */
-// Render the TOTP setup block: open-in-authenticator link + copyable secret.
-// No external QR library needed — the otpauth:// URI opens the authenticator app directly
-// on mobile; desktop users copy the secret and enter it manually.
-function drawQR(container, totpURI, secret) {
+// Render the TOTP setup block: QR code image + open-in-app link + copyable secret.
+function drawQR(container, totpURI, secret, qrImage) {
   container.innerHTML = '';
 
-  // "Open in authenticator" button — works natively on iOS/Android
+  // QR code image (server-generated PNG as base64 data URI)
+  if (qrImage) {
+    const img = document.createElement('img');
+    img.src = qrImage;
+    img.alt = 'QR code TOTP';
+    img.style.cssText = 'width:200px;height:200px;border-radius:8px;display:block';
+    container.appendChild(img);
+  }
+
+  // "Open in authenticator" deep link — works natively on iOS/Android
   const openBtn = el('a', 'btn btn-secondary btn-full');
   openBtn.href = totpURI;
+  openBtn.style.width = '100%';
   openBtn.textContent = '📱 ' + t('setup.open.app');
   container.appendChild(openBtn);
 
-  // Copyable secret for desktop manual entry
-  const row = el('div', 'setup-secret-row mt-1');
+  // Copyable secret for manual entry (apps that can't scan the QR)
+  const secretLabel = el('p', 'text-xs text-dimmer text-center', t('setup.secret.hint') || 'Can\'t scan? Enter this key manually:');
+  container.appendChild(secretLabel);
+
+  const row = el('div', 'setup-secret-row');
+  row.style.width = '100%';
   const secretSpan = el('span', '', secret);
   secretSpan.style.flex = '1';
   const copyBtn = el('button', '', '⎘');
@@ -2300,7 +2367,7 @@ async function openSetupPage(mode, token) {
       _setup.totpSecret = data.totp_secret;
       $('setup-next-btn').textContent = t('setup.scan');
       show('setup-totp-wrap');
-      drawQR($('setup-qr'), data.totp_uri, data.totp_secret);
+      drawQR($('setup-qr'), data.totp_uri, data.totp_secret, data.qr_image);
       $('setup-totp-secret').textContent = '';
     } catch {
       hide('view-setup');
@@ -2337,7 +2404,7 @@ async function setupNext() {
       $('setup-greeting').textContent = `${username} · ${data.email}`;
       hide('setup-username-group');
       show('setup-totp-wrap');
-      drawQR($('setup-qr'), data.totp_uri, data.totp_secret);
+      drawQR($('setup-qr'), data.totp_uri, data.totp_secret, data.qr_image);
       $('setup-totp-secret').textContent = '';
       $('setup-next-btn').textContent = t('setup.scan');
       $('setup-totp-code').focus();

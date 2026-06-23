@@ -178,14 +178,15 @@ func (h *Handler) GetMyAuditLog(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) BeginTOTP(w http.ResponseWriter, r *http.Request) {
 	user := middleware.UserFromCtx(r.Context())
-	secret, qrURL, err := h.Auth.BeginTOTP(r.Context(), user.ID)
+	secret, qrURL, qrImage, err := h.Auth.BeginTOTP(r.Context(), user.ID)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{
-		"secret": secret,
-		"qr_url": qrURL,
+	writeJSON(w, http.StatusOK, map[string]any{
+		"secret":   secret,
+		"qr_url":   qrURL,
+		"qr_image": qrImage,
 	})
 }
 
