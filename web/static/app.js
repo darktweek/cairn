@@ -70,6 +70,10 @@ const DEL  = (path, b)  => api('DELETE', path, b);
 // can reports whether the current user holds an instance permission.
 const can = perm => !!(S.user && Array.isArray(S.user.permissions) && S.user.permissions.includes(perm));
 
+// Admin-area permissions — holding any of them grants access to the admin panel.
+const ADMIN_PERMS = ['users.manage', 'settings.manage', 'audit.view', 'roles.manage', 'groups.manage'];
+const hasAdminAccess = () => ADMIN_PERMS.some(can);
+
 /* ─── DOM helpers ────────────────────────────────────────────────────────── */
 const $  = id => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -535,10 +539,10 @@ function handleSearch(e) {
         $('search-input').value = '';
         return;
       case 'admin':
-        if (S.user && S.user.role === 'admin') { openAdmin(); $('search-input').value = ''; return; }
+        if (hasAdminAccess()) { openAdmin(); $('search-input').value = ''; return; }
         break; // non-admin → fall through to DDG
       case 'stats':
-        if (S.user && S.user.role === 'admin') { openAdmin(); renderAdminTab('stats'); $('search-input').value = ''; return; }
+        if (hasAdminAccess()) { openAdmin(); renderAdminTab('stats'); $('search-input').value = ''; return; }
         break;
       case 'logout': case 'bye':
         logout();
@@ -574,10 +578,9 @@ function openSearch(url) {
 
 /* ─── Hub (menu bang) ────────────────────────────────────────────────────── */
 function openHub() {
-  const isAdmin = S.user && S.user.role === 'admin';
-  toggle('tile-admin', isAdmin);
-  // Setup prompt: admins see it when a mandatory prerequisite (SMTP) is missing.
-  toggle('hub-setup', isAdmin && S.user && S.user.smtp_configured === false);
+  toggle('tile-admin', hasAdminAccess());
+  // Setup prompt: settings-managers see it when a prerequisite (SMTP) is missing.
+  toggle('hub-setup', can('settings.manage') && S.user && S.user.smtp_configured === false);
   const g = $('hub-greeting');
   if (g && S.user) g.textContent = S.user.username;
   show('hub-overlay');

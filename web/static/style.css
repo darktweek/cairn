@@ -860,11 +860,38 @@ body.searching #date-line {
 .role-perm { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text-dim); }
 .mt-1 { margin-top: 0.5rem; }
 
-/* Themed checkboxes for roles, policies and groups. */
+/* Themed checkboxes for roles and policies (consistent in both states). */
 .role-perm input[type="checkbox"],
 .policy-row input[type="checkbox"] {
-  accent-color: var(--accent);
-  width: 15px; height: 15px; flex-shrink: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px; height: 16px;
+  margin: 0;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  cursor: pointer;
+  position: relative;
+}
+.role-perm input[type="checkbox"]:checked,
+.policy-row input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.role-perm input[type="checkbox"]:checked::after,
+.policy-row input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px; top: 2px;
+  width: 4px; height: 8px;
+  border: solid var(--accent-fg);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.role-perm input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* Neutral "system" badge (distinct from the red suspended badge). */
