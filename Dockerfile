@@ -8,10 +8,14 @@ RUN GONOSUMDB=* GOFLAGS=-mod=mod go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GONOSUMDB=* \
+# VERSION is injected by the release workflow (the git tag); falls back to
+# `git describe` for local builds, then to "dev".
+ARG VERSION=
+RUN apk add --no-cache git >/dev/null 2>&1 || true; \
+    CGO_ENABLED=0 GOOS=linux GONOSUMDB=* \
     go build \
     -mod=mod \
-    -ldflags="-s -w -X main.version=$(git describe --tags --always 2>/dev/null || echo dev)" \
+    -ldflags="-s -w -X main.version=${VERSION:-$(git describe --tags --always 2>/dev/null || echo dev)}" \
     -trimpath \
     -o cairn \
     ./cmd/cairn
