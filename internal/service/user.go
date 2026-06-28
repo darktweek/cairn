@@ -66,8 +66,10 @@ func (s *userService) Register(ctx context.Context, username, email, password, i
 	}
 
 	role := "user"
+	roleID := model.RoleIDUser
 	if isFirst {
 		role = "admin"
+		roleID = model.RoleIDOwner // the first user is the instance owner
 	}
 
 	hashed, err := hashPassword(password)
@@ -82,6 +84,7 @@ func (s *userService) Register(ctx context.Context, username, email, password, i
 		Email:        strings.ToLower(email),
 		Password:     hashed,
 		Role:         role,
+		RoleID:       roleID,
 		IsActive:     true,
 		SearchEngine: "duckduckgo",
 		CreatedAt:    now,
@@ -139,8 +142,10 @@ func (s *userService) ProvisionSSO(ctx context.Context, email, username, name, i
 		return nil, err
 	}
 	role := "user"
+	roleID := model.RoleIDUser
 	if isFirst {
 		role = "admin"
+		roleID = model.RoleIDOwner // the first user is the instance owner
 	}
 
 	// Random unusable password (SSO users never sign in with one).
@@ -158,6 +163,7 @@ func (s *userService) ProvisionSSO(ctx context.Context, email, username, name, i
 		Email:        email,
 		Password:     hashed,
 		Role:         role,
+		RoleID:       roleID,
 		IsActive:     true,
 		SearchEngine: "duckduckgo",
 		CreatedAt:    now,

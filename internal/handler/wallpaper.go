@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/darktweek/cairn/internal/middleware"
+	"github.com/darktweek/cairn/internal/model"
 	"github.com/darktweek/cairn/internal/service"
 )
 
@@ -109,8 +110,8 @@ func (h *Handler) ServeMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Isolation: a user only sees their own media (admins exempt).
-	if u := middleware.UserFromCtx(r.Context()); u == nil || (u.ID != userID && u.Role != "admin") {
+	// Isolation: a user only sees their own media (user-managers exempt).
+	if u := middleware.UserFromCtx(r.Context()); u == nil || (u.ID != userID && !u.Can(model.PermUsersManage)) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}

@@ -238,6 +238,15 @@ func (s *authService) ValidateSession(ctx context.Context, token string) (*model
 		return nil, nil, ErrUnauthorized
 	}
 
+	// Load the instance permission set so downstream RequirePermission checks
+	// and the frontend can reason about what this user may do.
+	if perms, err := s.repos.Roles.PermissionsForUser(ctx, user.ID); err == nil {
+		user.Permissions = perms
+	}
+	if user.RoleName == "" {
+		user.RoleName = "user"
+	}
+
 	return user, sess, nil
 }
 
@@ -428,6 +437,9 @@ func (s *authService) createSession(ctx context.Context, userID, ip, userAgent s
 	}
 
 	lifetime := sessionLifetime
+	if days := s.cfg.SessionLifetimeDays; days > 0 {
+		lifetime = time.Duration(days) * 24 * time.Hour
+	}
 	if isBookmarklet {
 		lifetime = time.Duration(s.settings.BookmarkletDays(ctx).Value) * 24 * time.Hour
 	}

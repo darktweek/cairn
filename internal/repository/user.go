@@ -26,6 +26,9 @@ type UserRepository interface {
 	List(ctx context.Context, offset, limit int) ([]*model.User, int, error)
 	Count(ctx context.Context) (int, error)
 	IsFirstUser(ctx context.Context) (bool, error)
+	// Search returns active users whose username matches q (id + username only),
+	// for the collection share picker.
+	Search(ctx context.Context, q string, limit int) ([]*model.User, error)
 }
 
 type sqliteUserRepo struct {
@@ -36,6 +39,14 @@ func newSQLiteUserRepo(db *sql.DB) UserRepository {
 	return &sqliteUserRepo{db: db}
 }
 
+// userCols / userFrom centralise the SELECT shape so every read resolves the
+// user's role_id and role display name via the roles table in one join.
+const userCols = `u.id, u.username, u.email, u.password, u.role, u.is_active, u.wallpaper_limit, u.upload_size_limit,
+	u.storage_quota, u.search_engine, u.search_engine_url, u.locale, u.created_at, u.updated_at, u.deleted_at,
+	u.role_id, rl.name`
+
+const userFrom = ` FROM users u LEFT JOIN roles rl ON rl.id = u.role_id `
+
 func (r *sqliteUserRepo) Create(ctx context.Context, u *model.User) error {
 	locale := u.Locale
 	if locale == "" {
@@ -43,10 +54,10 @@ func (r *sqliteUserRepo) Create(ctx context.Context, u *model.User) error {
 	}
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO users
-			(id, username, email, password, role, is_active, wallpaper_limit, upload_size_limit,
+			(id, username, email, password, role, role_id, is_active, wallpaper_limit, upload_size_limit,
 			 storage_quota, search_engine, search_engine_url, locale, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		u.ID, u.Username, u.Email, u.Password, u.Role, boolToInt(u.IsActive),
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		u.ID, u.Username, u.Email, u.Password, u.Role, nullStr(u.RoleID), boolToInt(u.IsActive),
 		u.WallpaperLimit, u.UploadSizeLimit, u.StorageQuota, u.SearchEngine, u.SearchEngineURL, locale,
 		u.CreatedAt.Unix(), u.UpdatedAt.Unix(),
 	)
@@ -57,18 +68,14 @@ func (r *sqliteUserRepo) Create(ctx context.Context, u *model.User) error {
 }
 
 func (r *sqliteUserRepo) GetByID(ctx context.Context, id string) (*model.User, error) {
-	row := r.db.QueryRowContext(ctx, `
-		SELECT id, username, email, password, role, is_active, wallpaper_limit, upload_size_limit,
-		       storage_quota, search_engine, search_engine_url, locale, created_at, updated_at, deleted_at
-		FROM users WHERE id = ? AND deleted_at IS NULL`, id)
+	row := r.db.QueryRowContext(ctx,
+		`SELECT `+userCols+userFrom+`WHERE u.id = ? AND u.deleted_at IS NULL`, id)
 	return scanUser(row)
 }
 
 func (r *sqliteUserRepo) GetByEmail(ctx context.Context, email string) (*model.User, error) {
-	row := r.db.QueryRowContext(ctx, `
-		SELECT id, username, email, password, role, is_active, wallpaper_limit, upload_size_limit,
-		       storage_quota, search_engine, search_engine_url, locale, created_at, updated_at, deleted_at
-		FROM users WHERE email = ? COLLATE NOCASE AND deleted_at IS NULL`, email)
+	row := r.db.QueryRowContext(ctx,
+		`SELECT `+userCols+userFrom+`WHERE u.email = ? COLLATE NOCASE AND u.deleted_at IS NULL`, email)
 	return scanUser(row)
 }
 
@@ -130,10 +137,8 @@ func (r *sqliteUserRepo) UsernamesByIDs(ctx context.Context, ids []string) (map[
 }
 
 func (r *sqliteUserRepo) GetByUsername(ctx context.Context, username string) (*model.User, error) {
-	row := r.db.QueryRowContext(ctx, `
-		SELECT id, username, email, password, role, is_active, wallpaper_limit, upload_size_limit,
-		       storage_quota, search_engine, search_engine_url, locale, created_at, updated_at, deleted_at
-		FROM users WHERE username = ? COLLATE NOCASE AND deleted_at IS NULL`, username)
+	row := r.db.QueryRowContext(ctx,
+		`SELECT `+userCols+userFrom+`WHERE u.username = ? COLLATE NOCASE AND u.deleted_at IS NULL`, username)
 	return scanUser(row)
 }
 
@@ -180,11 +185,9 @@ func (r *sqliteUserRepo) List(ctx context.Context, offset, limit int) ([]*model.
 		return nil, 0, fmt.Errorf("user list count: %w", err)
 	}
 
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, username, email, password, role, is_active, wallpaper_limit, upload_size_limit,
-		       storage_quota, search_engine, search_engine_url, locale, created_at, updated_at, deleted_at
-		FROM users WHERE deleted_at IS NULL
-		ORDER BY created_at DESC LIMIT ? OFFSET ?`, limit, offset)
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+userCols+userFrom+`WHERE u.deleted_at IS NULL
+		ORDER BY u.created_at DESC LIMIT ? OFFSET ?`, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("user list: %w", err)
 	}
@@ -233,6 +236,26 @@ func (r *sqliteUserRepo) Count(ctx context.Context) (int, error) {
 	return n, err
 }
 
+func (r *sqliteUserRepo) Search(ctx context.Context, q string, limit int) ([]*model.User, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, username FROM users
+		WHERE deleted_at IS NULL AND is_active = 1 AND username LIKE ? COLLATE NOCASE
+		ORDER BY username COLLATE NOCASE ASC LIMIT ?`, "%"+q+"%", limit)
+	if err != nil {
+		return nil, fmt.Errorf("user search: %w", err)
+	}
+	defer rows.Close()
+	var out []*model.User
+	for rows.Next() {
+		var u model.User
+		if err := rows.Scan(&u.ID, &u.Username); err != nil {
+			return nil, err
+		}
+		out = append(out, &u)
+	}
+	return out, rows.Err()
+}
+
 func (r *sqliteUserRepo) IsFirstUser(ctx context.Context) (bool, error) {
 	var n int
 	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&n)
@@ -250,12 +273,13 @@ func scanUser(s scanner) (*model.User, error) {
 	var createdAt, updatedAt int64
 	var deletedAt sql.NullInt64
 	var wallpaperLimit, uploadSizeLimit, storageQuota sql.NullInt64
-	var searchEngineURL sql.NullString
+	var searchEngineURL, roleID, roleName sql.NullString
 
 	err := s.Scan(
 		&u.ID, &u.Username, &u.Email, &u.Password, &u.Role,
 		&isActive, &wallpaperLimit, &uploadSizeLimit, &storageQuota, &u.SearchEngine, &searchEngineURL,
 		&u.Locale, &createdAt, &updatedAt, &deletedAt,
+		&roleID, &roleName,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -263,6 +287,9 @@ func scanUser(s scanner) (*model.User, error) {
 		}
 		return nil, fmt.Errorf("scan user: %w", err)
 	}
+
+	u.RoleID = roleID.String
+	u.RoleName = roleName.String
 
 	u.IsActive = isActive == 1
 	u.CreatedAt = time.Unix(createdAt, 0)

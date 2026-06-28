@@ -15,11 +15,21 @@ import (
 	"golang.org/x/net/html"
 )
 
+// BookmarkInput carries the mutable fields of a bookmark create/update request.
+type BookmarkInput struct {
+	URL          string
+	Title        string
+	CollectionID string // empty = the user's personal collection
+	FolderID     *string
+	Tags         []string
+}
+
 type BookmarkService interface {
-	Create(ctx context.Context, userID, rawURL, title string, folder *string, tags []string) (*model.Bookmark, error)
-	Update(ctx context.Context, userID, bookmarkID, rawURL, title string, folder *string, tags []string) error
+	Create(ctx context.Context, userID string, in BookmarkInput) (*model.Bookmark, error)
+	Update(ctx context.Context, userID, bookmarkID string, in BookmarkInput) error
 	Delete(ctx context.Context, userID, bookmarkID string) error
 	List(ctx context.Context, userID string, filter repository.BookmarkFilter) ([]*model.Bookmark, int, error)
+	ListInCollection(ctx context.Context, userID, collectionID string, filter repository.BookmarkFilter) ([]*model.Bookmark, int, error)
 	UpdateSort(ctx context.Context, userID string, ids []string) error
 	ImportNetscape(ctx context.Context, userID string, data []byte) (imported, skipped int, err error)
 	ExportNetscape(ctx context.Context, userID string) ([]byte, error)
@@ -38,65 +48,150 @@ func newBookmarkService(repos *repository.Repositories, cfg *config.Config, auth
 	return &bookmarkService{repos: repos, cfg: cfg, auth: auth}
 }
 
-func (s *bookmarkService) Create(ctx context.Context, userID, rawURL, title string, folder *string, tags []string) (*model.Bookmark, error) {
-	if !isValidURL(rawURL) {
+// requirePerm checks the user holds at least `need` on the collection. No access
+// at all is reported as ErrNotFound (so the collection's existence stays hidden);
+// insufficient-but-present access is ErrForbidden.
+func (s *bookmarkService) requirePerm(ctx context.Context, userID, collectionID, need string) error {
+	perm, err := s.repos.Collections.EffectivePerm(ctx, userID, collectionID)
+	if err != nil {
+		return err
+	}
+	if perm == "" {
+		return ErrNotFound
+	}
+	if !model.PermAtLeast(perm, need) {
+		return ErrForbidden
+	}
+	return nil
+}
+
+// resolveTarget returns the target collection ID (defaulting to the user's
+// personal collection) and validates that the optional folder lives in it.
+func (s *bookmarkService) resolveTarget(ctx context.Context, userID, collectionID string, folderID *string) (string, *string, error) {
+	if collectionID == "" {
+		personal, err := s.repos.Collections.GetOrCreatePersonal(ctx, userID)
+		if err != nil {
+			return "", nil, err
+		}
+		collectionID = personal.ID
+	}
+	if err := s.requirePerm(ctx, userID, collectionID, model.PermEdit); err != nil {
+		return "", nil, err
+	}
+	if folderID != nil {
+		if *folderID == "" {
+			folderID = nil
+		} else {
+			f, err := s.repos.Folders.GetByID(ctx, *folderID)
+			if err != nil || f.CollectionID != collectionID {
+				return "", nil, fmt.Errorf("%w: folder does not belong to collection", ErrInvalidInput)
+			}
+		}
+	}
+	return collectionID, folderID, nil
+}
+
+func (s *bookmarkService) Create(ctx context.Context, userID string, in BookmarkInput) (*model.Bookmark, error) {
+	if !isValidURL(in.URL) {
 		return nil, fmt.Errorf("%w: invalid URL", ErrInvalidInput)
+	}
+
+	collectionID, folderID, err := s.resolveTarget(ctx, userID, in.CollectionID, in.FolderID)
+	if err != nil {
+		return nil, err
 	}
 
 	now := time.Now()
 	b := &model.Bookmark{
-		ID:        ulid.Make().String(),
-		UserID:    userID,
-		URL:       rawURL,
-		Title:     title,
-		Folder:    folder,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:           ulid.Make().String(),
+		UserID:       userID,
+		CollectionID: collectionID,
+		FolderID:     folderID,
+		URL:          in.URL,
+		Title:        in.Title,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 
 	if err := s.repos.Bookmarks.Create(ctx, b); err != nil {
 		return nil, err
 	}
-
-	if err := s.applyTags(ctx, b.ID, userID, tags); err != nil {
+	if err := s.applyTags(ctx, b.ID, userID, in.Tags); err != nil {
 		return nil, err
 	}
-
-	return s.repos.Bookmarks.GetByID(ctx, b.ID, userID)
+	return s.repos.Bookmarks.GetByID(ctx, b.ID)
 }
 
-func (s *bookmarkService) Update(ctx context.Context, userID, bookmarkID, rawURL, title string, folder *string, tags []string) error {
-	if !isValidURL(rawURL) {
+func (s *bookmarkService) Update(ctx context.Context, userID, bookmarkID string, in BookmarkInput) error {
+	if !isValidURL(in.URL) {
 		return fmt.Errorf("%w: invalid URL", ErrInvalidInput)
 	}
 
-	b, err := s.repos.Bookmarks.GetByID(ctx, bookmarkID, userID)
+	b, err := s.repos.Bookmarks.GetByID(ctx, bookmarkID)
 	if err != nil {
 		return ErrNotFound
 	}
+	// Must be able to edit the bookmark's current collection.
+	if err := s.requirePerm(ctx, userID, b.CollectionID, model.PermEdit); err != nil {
+		return err
+	}
 
-	b.URL = rawURL
-	b.Title = title
-	b.Folder = folder
+	// A move keeps the current collection when none is supplied.
+	target := in.CollectionID
+	if target == "" {
+		target = b.CollectionID
+	}
+	collectionID, folderID, err := s.resolveTarget(ctx, userID, target, in.FolderID)
+	if err != nil {
+		return err
+	}
+
+	b.CollectionID = collectionID
+	b.FolderID = folderID
+	b.URL = in.URL
+	b.Title = in.Title
 	b.UpdatedAt = time.Now()
 
 	if err := s.repos.Bookmarks.Update(ctx, b); err != nil {
 		return err
 	}
-
-	return s.applyTags(ctx, bookmarkID, userID, tags)
+	return s.applyTags(ctx, bookmarkID, userID, in.Tags)
 }
 
 func (s *bookmarkService) Delete(ctx context.Context, userID, bookmarkID string) error {
-	return s.repos.Bookmarks.Delete(ctx, bookmarkID, userID)
+	b, err := s.repos.Bookmarks.GetByID(ctx, bookmarkID)
+	if err != nil {
+		return ErrNotFound
+	}
+	if err := s.requirePerm(ctx, userID, b.CollectionID, model.PermEdit); err != nil {
+		return err
+	}
+	return s.repos.Bookmarks.Delete(ctx, bookmarkID)
 }
 
 func (s *bookmarkService) List(ctx context.Context, userID string, filter repository.BookmarkFilter) ([]*model.Bookmark, int, error) {
 	return s.repos.Bookmarks.ListByUser(ctx, userID, filter)
 }
 
+func (s *bookmarkService) ListInCollection(ctx context.Context, userID, collectionID string, filter repository.BookmarkFilter) ([]*model.Bookmark, int, error) {
+	if err := s.requirePerm(ctx, userID, collectionID, model.PermView); err != nil {
+		return nil, 0, err
+	}
+	return s.repos.Bookmarks.ListByCollection(ctx, collectionID, filter)
+}
+
 func (s *bookmarkService) UpdateSort(ctx context.Context, userID string, ids []string) error {
-	return s.repos.Bookmarks.UpdateSort(ctx, userID, ids)
+	// Verify the user can edit every bookmark before reordering.
+	for _, id := range ids {
+		b, err := s.repos.Bookmarks.GetByID(ctx, id)
+		if err != nil {
+			return ErrNotFound
+		}
+		if err := s.requirePerm(ctx, userID, b.CollectionID, model.PermEdit); err != nil {
+			return err
+		}
+	}
+	return s.repos.Bookmarks.UpdateSort(ctx, ids)
 }
 
 func (s *bookmarkService) ImportNetscape(ctx context.Context, userID string, data []byte) (int, int, error) {
@@ -105,7 +200,13 @@ func (s *bookmarkService) ImportNetscape(ctx context.Context, userID string, dat
 		return 0, 0, fmt.Errorf("%w: %s", ErrInvalidInput, err.Error())
 	}
 
+	personal, err := s.repos.Collections.GetOrCreatePersonal(ctx, userID)
+	if err != nil {
+		return 0, 0, err
+	}
+
 	now := time.Now()
+	folderCache := map[string]string{} // folder name -> folder id
 	var toInsert []*model.Bookmark
 	skipped := 0
 
@@ -114,40 +215,44 @@ func (s *bookmarkService) ImportNetscape(ctx context.Context, userID string, dat
 			skipped++
 			continue
 		}
-		var folder *string
+		var folderID *string
 		if item.folder != "" {
-			f := item.folder
-			folder = &f
+			id, ok := folderCache[item.folder]
+			if !ok {
+				f, err := s.repos.Folders.GetOrCreateRoot(ctx, personal.ID, item.folder)
+				if err != nil {
+					return 0, 0, err
+				}
+				id = f.ID
+				folderCache[item.folder] = id
+			}
+			folderID = &id
 		}
-		b := &model.Bookmark{
-			ID:        ulid.Make().String(),
-			UserID:    userID,
-			URL:       item.url,
-			Title:     item.title,
-			Folder:    folder,
-			CreatedAt: now,
-			UpdatedAt: now,
-		}
-		toInsert = append(toInsert, b)
+		toInsert = append(toInsert, &model.Bookmark{
+			ID:           ulid.Make().String(),
+			UserID:       userID,
+			CollectionID: personal.ID,
+			FolderID:     folderID,
+			URL:          item.url,
+			Title:        item.title,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		})
 	}
 
 	if len(toInsert) == 0 {
 		return 0, skipped, nil
 	}
-
-	if err := s.repos.Bookmarks.BulkCreate(ctx, userID, toInsert); err != nil {
+	if err := s.repos.Bookmarks.BulkCreate(ctx, toInsert); err != nil {
 		return 0, 0, err
 	}
 
 	imported := len(toInsert)
 	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
-		ID:     ulid.Make().String(),
-		UserID: &userID,
-		Action: "bookmark_import",
-		Metadata: map[string]any{
-			"imported": imported,
-			"skipped":  skipped,
-		},
+		ID:        ulid.Make().String(),
+		UserID:    &userID,
+		Action:    "bookmark_import",
+		Metadata:  map[string]any{"imported": imported, "skipped": skipped},
 		CreatedAt: now,
 	})
 
@@ -181,6 +286,12 @@ func (s *bookmarkService) ExportNetscape(ctx context.Context, userID string) ([]
 		return nil, err
 	}
 
+	// Resolve folder names across the user's collections for the folder headings.
+	folderNames, err := s.userFolderNames(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
 	type entry struct {
 		URL     string
 		Title   string
@@ -191,8 +302,8 @@ func (s *bookmarkService) ExportNetscape(ctx context.Context, userID string) ([]
 	var entries []entry
 	for _, b := range bookmarks {
 		folder := ""
-		if b.Folder != nil {
-			folder = *b.Folder
+		if b.FolderID != nil {
+			folder = folderNames[*b.FolderID]
 		}
 		entries = append(entries, entry{
 			URL:     b.URL,
@@ -207,6 +318,25 @@ func (s *bookmarkService) ExportNetscape(ctx context.Context, userID string) ([]
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// userFolderNames builds a folderID -> name map across the user's collections.
+func (s *bookmarkService) userFolderNames(ctx context.Context, userID string) (map[string]string, error) {
+	ids, err := s.repos.Collections.AccessibleCollectionIDs(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	names := map[string]string{}
+	for _, cid := range ids {
+		folders, err := s.repos.Folders.ListByCollection(ctx, cid)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range folders {
+			names[f.ID] = f.Name
+		}
+	}
+	return names, nil
 }
 
 func (s *bookmarkService) GenerateBookmarklet(ctx context.Context, userID, ip, userAgent string) (string, error) {
@@ -274,7 +404,6 @@ func parseNetscape(data []byte) ([]netscapeItem, error) {
 		if n.Type == html.ElementNode {
 			switch strings.ToUpper(n.Data) {
 			case "H3":
-				// folder name = text content of H3
 				folder = textContent(n)
 			case "A":
 				item := netscapeItem{folder: folder}

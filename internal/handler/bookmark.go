@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/darktweek/cairn/internal/middleware"
+	"github.com/darktweek/cairn/internal/model"
 	"github.com/darktweek/cairn/internal/repository"
 	"github.com/darktweek/cairn/internal/service"
 )
@@ -21,14 +22,25 @@ func (h *Handler) ListBookmarks(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 		Limit:  limit,
 	}
-	if folder := q.Get("folder"); folder != "" {
-		filter.Folder = &folder
+	if folderID := q.Get("folder_id"); folderID != "" {
+		filter.FolderID = &folderID
 	}
 	if tagID := q.Get("tag_id"); tagID != "" {
 		filter.TagID = &tagID
 	}
 
-	bookmarks, total, err := h.Bookmark.List(r.Context(), user.ID, filter)
+	var (
+		bookmarks []*model.Bookmark
+		total     int
+		err       error
+	)
+	// When a collection is given, list that collection (access-checked); otherwise
+	// list the bookmarks the user authored (start-page view).
+	if collectionID := q.Get("collection_id"); collectionID != "" {
+		bookmarks, total, err = h.Bookmark.ListInCollection(r.Context(), user.ID, collectionID, filter)
+	} else {
+		bookmarks, total, err = h.Bookmark.List(r.Context(), user.ID, filter)
+	}
 	if err != nil {
 		writeError(w, err)
 		return
@@ -43,17 +55,24 @@ func (h *Handler) ListBookmarks(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateBookmark(w http.ResponseWriter, r *http.Request) {
 	user := middleware.UserFromCtx(r.Context())
 	var body struct {
-		URL    string   `json:"url"`
-		Title  string   `json:"title"`
-		Folder *string  `json:"folder"`
-		Tags   []string `json:"tags"`
+		URL          string   `json:"url"`
+		Title        string   `json:"title"`
+		CollectionID string   `json:"collection_id"`
+		FolderID     *string  `json:"folder_id"`
+		Tags         []string `json:"tags"`
 	}
 	if err := decode(r, &body); err != nil {
 		writeError(w, fmt.Errorf("%w: invalid JSON", service.ErrInvalidInput))
 		return
 	}
 
-	b, err := h.Bookmark.Create(r.Context(), user.ID, body.URL, body.Title, body.Folder, body.Tags)
+	b, err := h.Bookmark.Create(r.Context(), user.ID, service.BookmarkInput{
+		URL:          body.URL,
+		Title:        body.Title,
+		CollectionID: body.CollectionID,
+		FolderID:     body.FolderID,
+		Tags:         body.Tags,
+	})
 	if err != nil {
 		writeError(w, err)
 		return
@@ -73,17 +92,24 @@ func (h *Handler) UpdateBookmark(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	var body struct {
-		URL    string   `json:"url"`
-		Title  string   `json:"title"`
-		Folder *string  `json:"folder"`
-		Tags   []string `json:"tags"`
+		URL          string   `json:"url"`
+		Title        string   `json:"title"`
+		CollectionID string   `json:"collection_id"`
+		FolderID     *string  `json:"folder_id"`
+		Tags         []string `json:"tags"`
 	}
 	if err := decode(r, &body); err != nil {
 		writeError(w, fmt.Errorf("%w: invalid JSON", service.ErrInvalidInput))
 		return
 	}
 
-	if err := h.Bookmark.Update(r.Context(), user.ID, id, body.URL, body.Title, body.Folder, body.Tags); err != nil {
+	if err := h.Bookmark.Update(r.Context(), user.ID, id, service.BookmarkInput{
+		URL:          body.URL,
+		Title:        body.Title,
+		CollectionID: body.CollectionID,
+		FolderID:     body.FolderID,
+		Tags:         body.Tags,
+	}); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -176,7 +202,10 @@ func (h *Handler) QuickBookmark(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	b, err := h.Bookmark.Create(r.Context(), user.ID, body.URL, body.Title, nil, nil)
+	b, err := h.Bookmark.Create(r.Context(), user.ID, service.BookmarkInput{
+		URL:   body.URL,
+		Title: body.Title,
+	})
 	if err != nil {
 		writeError(w, err)
 		return

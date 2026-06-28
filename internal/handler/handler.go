@@ -13,27 +13,39 @@ type Handler struct {
 	Auth         service.AuthService
 	User         service.UserService
 	Bookmark     service.BookmarkService
+	Collection   service.CollectionService
+	Group        service.GroupService
+	RBAC         service.RBACService
 	Wallpaper    service.WallpaperService
 	Admin        service.AdminService
 	Email        service.EmailService
 	Invitation   service.InvitationService
-	Settings     service.SettingsService
-	OIDC         service.OIDCService
-	secureCookie bool
+	Settings      service.SettingsService
+	OIDC          service.OIDCService
+	secureCookie  bool
+	sessionMaxAge int
 }
 
-func New(svcs *service.Services, production bool) *Handler {
+func New(svcs *service.Services, production bool, sessionDays int) *Handler {
+	maxAge := defaultSessionMaxAge
+	if sessionDays > 0 {
+		maxAge = sessionDays * 24 * 60 * 60
+	}
 	return &Handler{
-		Auth:         svcs.Auth,
-		User:         svcs.User,
-		Bookmark:     svcs.Bookmark,
-		Wallpaper:    svcs.Wallpaper,
-		Admin:        svcs.Admin,
-		Email:        svcs.Email,
-		Invitation:   svcs.Invitation,
-		Settings:     svcs.Settings,
-		OIDC:         svcs.OIDC,
-		secureCookie: production,
+		Auth:          svcs.Auth,
+		User:          svcs.User,
+		Bookmark:      svcs.Bookmark,
+		Collection:    svcs.Collection,
+		Group:         svcs.Group,
+		RBAC:          svcs.RBAC,
+		Wallpaper:     svcs.Wallpaper,
+		Admin:         svcs.Admin,
+		Email:         svcs.Email,
+		Invitation:    svcs.Invitation,
+		Settings:      svcs.Settings,
+		OIDC:          svcs.OIDC,
+		secureCookie:  production,
+		sessionMaxAge: maxAge,
 	}
 }
 

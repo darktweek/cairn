@@ -64,7 +64,7 @@ func (h *Handler) CompleteSetup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	h.setSessionCookie(w, token, sessionMaxAge)
+	h.setSessionCookie(w, token, h.sessionMaxAge)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -109,7 +109,7 @@ func (h *Handler) CompleteInviteSetup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	h.setSessionCookie(w, token, sessionMaxAge)
+	h.setSessionCookie(w, token, h.sessionMaxAge)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 

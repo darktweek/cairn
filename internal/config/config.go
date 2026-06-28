@@ -26,6 +26,9 @@ type Config struct {
 	DefaultStorageQuota      int64  // max total media storage per user (default 200 MB)
 	BookmarkletTokenLifetime int
 
+	// Sessions
+	SessionLifetimeDays int // browser session validity in days (default 30)
+
 	// TOTP
 	TOTPIssuer string
 
@@ -68,6 +71,7 @@ func Load() (*Config, error) {
 		MaxUploadSize:            getEnvInt64("CAIRN_MAX_UPLOAD_SIZE", 52428800),   // 50 MB
 		DefaultStorageQuota:      getEnvInt64("CAIRN_STORAGE_QUOTA", 209715200),   // 200 MB
 		BookmarkletTokenLifetime: getEnvInt("CAIRN_BOOKMARKLET_TOKEN_LIFETIME", 90),
+		SessionLifetimeDays:      getEnvInt("CAIRN_SESSION_LIFETIME_DAYS", 30),
 		TOTPIssuer:               getEnv("CAIRN_TOTP_ISSUER", "Cairn"),
 		OpenRegistration:         getEnvBool("CAIRN_OPEN_REGISTRATION", true),
 		InviteLifetime:           getEnvInt("CAIRN_INVITE_LIFETIME", 72),

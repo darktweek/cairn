@@ -20,6 +20,7 @@ import (
 	"github.com/darktweek/cairn/internal/db"
 	"github.com/darktweek/cairn/internal/handler"
 	"github.com/darktweek/cairn/internal/middleware"
+	"github.com/darktweek/cairn/internal/model"
 	"github.com/darktweek/cairn/internal/repository"
 	"github.com/darktweek/cairn/internal/service"
 	cairnweb "github.com/darktweek/cairn/web"
@@ -65,7 +66,7 @@ func run() error {
 
 	repos := repository.New(database)
 	svcs := service.New(repos, cfg)
-	h := handler.New(svcs, strings.HasPrefix(cfg.BaseURL, "https://"))
+	h := handler.New(svcs, strings.HasPrefix(cfg.BaseURL, "https://"), cfg.SessionLifetimeDays)
 
 	// Background: purge expired sessions and pending registrations every hour.
 	go func() {
@@ -178,6 +179,9 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 	// Public: open registration flag (used by login page to show/hide register link).
 	r.Get("/api/auth/config", h.PublicAuthConfig)
 
+	// Public: read-only collection share links.
+	r.Get("/api/public/collections/{token}", h.PublicCollectionView)
+
 	// Public: SSO / OIDC.
 	r.Get("/api/auth/sso/config", h.SSOConfig)
 	r.Get("/api/auth/sso/login", h.SSOLogin)
@@ -240,6 +244,37 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 		r.With(middleware.BodyLimit(10<<20)).Post("/api/bookmarks/import", h.ImportBookmarks)
 		r.Get("/api/bookmarks/export", h.ExportBookmarks)
 
+		// Collections & folders
+		r.Get("/api/collections", h.ListCollections)
+		r.Post("/api/collections", h.CreateCollection)
+		r.Get("/api/collections/{id}", h.GetCollection)
+		r.Put("/api/collections/{id}", h.UpdateCollection)
+		r.Delete("/api/collections/{id}", h.DeleteCollection)
+		r.Get("/api/collections/{id}/folders", h.ListCollectionFolders)
+		r.Post("/api/collections/{id}/folders", h.CreateCollectionFolder)
+		r.Get("/api/collections/{id}/shares", h.ListCollectionShares)
+		r.Post("/api/collections/{id}/shares", h.SetCollectionShare)
+		r.Delete("/api/collections/{id}/shares/{userId}", h.RemoveCollectionShare)
+		r.Post("/api/collections/{id}/group-shares", h.SetCollectionGroupShare)
+		r.Delete("/api/collections/{id}/group-shares/{groupId}", h.RemoveCollectionGroupShare)
+		r.Post("/api/collections/{id}/public-link", h.SetCollectionPublicLink)
+		r.Put("/api/folders/{id}", h.UpdateFolder)
+		r.Delete("/api/folders/{id}", h.DeleteFolder)
+		r.Get("/api/users/search", h.SearchUsers)
+
+		// Groups: listing is open to authenticated users (share picker);
+		// mutations require the groups.manage permission.
+		r.Get("/api/groups", h.ListGroups)
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequirePermission(model.PermGroupsManage))
+			r.Post("/api/groups", h.CreateGroup)
+			r.Put("/api/groups/{id}", h.UpdateGroup)
+			r.Delete("/api/groups/{id}", h.DeleteGroup)
+			r.Get("/api/groups/{id}/members", h.ListGroupMembers)
+			r.Post("/api/groups/{id}/members", h.AddGroupMember)
+			r.Delete("/api/groups/{id}/members/{userId}", h.RemoveGroupMember)
+		})
+
 		// Tags
 		r.Get("/api/tags", h.ListTags)
 		r.Delete("/api/tags/{id}", h.DeleteTag)
@@ -254,38 +289,67 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 		// Media — served from filesystem.
 		r.Get("/media/{userID}/{filename}", h.ServeMedia)
 
-		// Admin.
+		// Admin — coarse guard: reachable by anyone holding an admin-area permission.
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.Admin)
+			r.Use(middleware.RequireAnyPermission(
+				model.PermUsersManage, model.PermSettingsManage, model.PermAuditView,
+				model.PermRolesManage, model.PermGroupsManage,
+			))
 
-			r.Get("/api/admin/users", h.AdminListUsers)
-			r.Get("/api/admin/users/{id}", h.AdminGetUser)
-			r.Get("/api/admin/users/{id}/stats", h.AdminGetUserStats)
-			r.Put("/api/admin/users/{id}/suspend", h.AdminSuspendUser)
-			r.Put("/api/admin/users/{id}/activate", h.AdminActivateUser)
-			r.Delete("/api/admin/users/{id}", h.AdminDeleteUser)
-			r.Put("/api/admin/users/{id}/wallpaper-limit", h.AdminSetWallpaperLimit)
-			r.Put("/api/admin/users/{id}/upload-size-limit", h.AdminSetUploadSizeLimit)
-			r.Put("/api/admin/users/{id}/storage-quota", h.AdminSetStorageQuota)
-			r.Get("/api/admin/pending-registrations", h.AdminListPendingRegistrations)
-			r.Delete("/api/admin/pending-registrations/{id}", h.AdminRevokePendingRegistration)
-			r.Get("/api/admin/audit", h.AdminGetAuditLog)
 			r.Get("/api/admin/stats", h.AdminGetStats)
+			r.Get("/api/admin/permissions", h.ListPermissions)
 
-			// Invitations / registration settings.
-			r.Get("/api/admin/settings/registration", h.AdminGetRegistrationSettings)
-			r.Put("/api/admin/settings/registration", h.AdminSetRegistrationSettings)
-			r.Get("/api/admin/settings/menu", h.AdminGetMenuSettings)
-			r.Put("/api/admin/settings/menu", h.AdminSetMenuSettings)
-			r.Get("/api/admin/settings/sso", h.AdminGetSSOSettings)
-			r.Put("/api/admin/settings/sso", h.AdminSetSSOSettings)
-			r.Get("/api/admin/settings/system", h.AdminGetSystemSettings)
-			r.Put("/api/admin/settings/system", h.AdminSetSystemSettings)
-			r.Post("/api/admin/settings/smtp/test", h.AdminTestSMTP)
-			r.Get("/api/admin/invitations", h.AdminListInvitations)
-			r.Post("/api/admin/invitations", h.AdminCreateInvitation)
-			r.Delete("/api/admin/invitations/{id}", h.AdminRevokeInvitation)
-			r.Post("/api/admin/invitations/{id}/resend", h.AdminResendInvitation)
+			// User management.
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequirePermission(model.PermUsersManage))
+				r.Get("/api/admin/users", h.AdminListUsers)
+				r.Get("/api/admin/users/{id}", h.AdminGetUser)
+				r.Get("/api/admin/users/{id}/stats", h.AdminGetUserStats)
+				r.Put("/api/admin/users/{id}/suspend", h.AdminSuspendUser)
+				r.Put("/api/admin/users/{id}/activate", h.AdminActivateUser)
+				r.Delete("/api/admin/users/{id}", h.AdminDeleteUser)
+				r.Put("/api/admin/users/{id}/wallpaper-limit", h.AdminSetWallpaperLimit)
+				r.Put("/api/admin/users/{id}/upload-size-limit", h.AdminSetUploadSizeLimit)
+				r.Put("/api/admin/users/{id}/storage-quota", h.AdminSetStorageQuota)
+				r.Put("/api/admin/users/{id}/role", h.AssignUserRole)
+				r.Get("/api/admin/pending-registrations", h.AdminListPendingRegistrations)
+				r.Delete("/api/admin/pending-registrations/{id}", h.AdminRevokePendingRegistration)
+				r.Get("/api/admin/invitations", h.AdminListInvitations)
+				r.Post("/api/admin/invitations", h.AdminCreateInvitation)
+				r.Delete("/api/admin/invitations/{id}", h.AdminRevokeInvitation)
+				r.Post("/api/admin/invitations/{id}/resend", h.AdminResendInvitation)
+			})
+
+			// Audit log.
+			r.With(middleware.RequirePermission(model.PermAuditView)).
+				Get("/api/admin/audit", h.AdminGetAuditLog)
+
+			// Roles (RBAC). Listing is also available to user-managers so they
+			// can populate the role picker; mutations require roles.manage.
+			r.With(middleware.RequireAnyPermission(model.PermRolesManage, model.PermUsersManage)).
+				Get("/api/admin/roles", h.ListRoles)
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequirePermission(model.PermRolesManage))
+				r.Post("/api/admin/roles", h.CreateRole)
+				r.Put("/api/admin/roles/{id}", h.UpdateRole)
+				r.Delete("/api/admin/roles/{id}", h.DeleteRole)
+			})
+
+			// Instance settings.
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequirePermission(model.PermSettingsManage))
+				r.Get("/api/admin/settings/registration", h.AdminGetRegistrationSettings)
+				r.Put("/api/admin/settings/registration", h.AdminSetRegistrationSettings)
+				r.Get("/api/admin/settings/menu", h.AdminGetMenuSettings)
+				r.Put("/api/admin/settings/menu", h.AdminSetMenuSettings)
+				r.Get("/api/admin/settings/sso", h.AdminGetSSOSettings)
+				r.Put("/api/admin/settings/sso", h.AdminSetSSOSettings)
+				r.Get("/api/admin/settings/system", h.AdminGetSystemSettings)
+				r.Put("/api/admin/settings/system", h.AdminSetSystemSettings)
+				r.Post("/api/admin/settings/smtp/test", h.AdminTestSMTP)
+				r.Get("/api/admin/settings/policies", h.GetPolicies)
+				r.Put("/api/admin/settings/policies", h.SetPolicy)
+			})
 		})
 	})
 
@@ -297,6 +361,10 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 	})
 	r.Get("/app.js", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, static, "app.js")
+	})
+	// Public read-only collection viewer (anonymous share links).
+	r.Get("/s/{token}", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, static, "public.html")
 	})
 	r.Get("/i18n.js", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, static, "i18n.js")

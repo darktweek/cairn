@@ -829,6 +829,9 @@ body.searching #date-line {
 .bm-section       { margin-bottom: 1.25rem; }
 
 .bm-section-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 0.7rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -837,6 +840,54 @@ body.searching #date-line {
   margin-bottom: 0.4rem;
   border-bottom: 1px solid var(--border);
 }
+
+/* ── RBAC roles ──────────────────────────────────────── */
+.role-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--input-bg);
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 0.8rem;
+}
+.role-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+.role-name { font-weight: 600; }
+.role-perms {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.25rem 0.75rem;
+  margin: 0.4rem 0;
+}
+.role-perm { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text-dim); }
+.mt-1 { margin-top: 0.5rem; }
+
+/* Themed checkboxes for roles, policies and groups. */
+.role-perm input[type="checkbox"],
+.policy-row input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 15px; height: 15px; flex-shrink: 0;
+}
+
+/* Neutral "system" badge (distinct from the red suspended badge). */
+.badge-system { background: var(--input-bg); color: var(--text-dim); border: 1px solid var(--border); }
+
+.group-members { margin-top: 0.6rem; }
+
+/* ── Collection sharing ──────────────────────────────── */
+.share-row, .share-result {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.35rem 0; border-bottom: 1px solid var(--border);
+}
+.share-results { max-height: 160px; overflow-y: auto; }
+.policy-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0; font-size: 0.9rem; }
+.bm-author { font-size: 0.72rem; color: var(--text-dimmer); margin-left: 0.4rem; }
+
+.bm-folder-del {
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.bm-section-name:hover .bm-folder-del { opacity: 0.7; }
+.bm-folder-del:hover { opacity: 1; }
 
 .bm-item {
   display: flex;
@@ -1264,11 +1315,16 @@ body.searching #date-line {
 .admin-user-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 0.4rem;
   padding: 0.55rem 0;
   border-bottom: 1px solid var(--border);
   gap: 0.75rem;
   font-size: 0.875rem;
 }
+/* Keep the user identity on its own line; actions wrap neatly beneath it. */
+.admin-user-row > .flex-1 { flex: 1 1 100%; min-width: 0; }
+.admin-user-row .form-input-sm { max-width: 7rem; }
 
 .user-name  { color: var(--text); }
 .user-email { color: var(--text-dimmer); font-size: 0.8rem; }

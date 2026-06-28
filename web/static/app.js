@@ -32,7 +32,10 @@ const S = {
   bmOffset:    0,
   bmLimit:     50,
   bmFilter:    '',
-  bmFolder:    '',
+  bmFolderId:  '',       // folder filter within the current collection
+  collections: [],
+  currentColId: '',      // selected collection id
+  folders:     [],       // folders of the current collection
   wallpapers:  [],
   sessions:    [],
   editingBmId: null,
@@ -63,6 +66,9 @@ const GET  = path       => api('GET',    path);
 const POST = (path, b)  => api('POST',   path, b);
 const PUT  = (path, b)  => api('PUT',    path, b);
 const DEL  = (path, b)  => api('DELETE', path, b);
+
+// can reports whether the current user holds an instance permission.
+const can = perm => !!(S.user && Array.isArray(S.user.permissions) && S.user.permissions.includes(perm));
 
 /* ─── DOM helpers ────────────────────────────────────────────────────────── */
 const $  = id => document.getElementById(id);
@@ -396,7 +402,7 @@ function initSearchSuggestions() {
         $('search-form').requestSubmit();
         return;
       }
-      if (rest) open(bang.url + encodeURIComponent(rest), '_blank');
+      if (rest) openSearch(bang.url + encodeURIComponent(rest));
       else { input.value = bang.bang + ' '; hideSuggestions(); input.focus(); return; }
       hideSuggestions();
       input.value = '';
@@ -551,14 +557,20 @@ function handleSearch(e) {
         return;
       default:
         // pass all other DDG bangs through
-        open(`https://duckduckgo.com/?q=${encodeURIComponent(q)}`);
+        openSearch(`https://duckduckgo.com/?q=${encodeURIComponent(q)}`);
         return;
     }
   }
-  open(engineURL() + encodeURIComponent(q));
+  openSearch(engineURL() + encodeURIComponent(q));
 }
 
 function open(url) { window.location.href = url; }
+
+// openSearch honours the per-user "open searches in a new tab" preference.
+function openSearch(url) {
+  if (loadThemePrefs().searchNewTab) window.open(url, '_blank', 'noopener');
+  else window.location.href = url;
+}
 
 /* ─── Hub (menu bang) ────────────────────────────────────────────────────── */
 function openHub() {
@@ -692,7 +704,7 @@ async function logout() {
 /* ─── Bookmark panel ─────────────────────────────────────────────────────── */
 function openBookmarks() {
   show('overlay-bookmarks');
-  loadBookmarks();
+  loadCollections();
 }
 
 function closeBookmarks() {
@@ -888,13 +900,101 @@ function applyMenuTheme() {
   }
 }
 
+// currentCollection returns the selected collection object (or null).
+function currentCollection() {
+  return S.collections.find(c => c.id === S.currentColId) || null;
+}
+
+// folderPath builds the slash-joined path of a folder from S.folders.
+function folderPath(folderId) {
+  const byId = new Map(S.folders.map(f => [f.id, f]));
+  const parts = [];
+  let cur = byId.get(folderId);
+  let guard = 0;
+  while (cur && guard++ < 50) {
+    parts.unshift(cur.name);
+    cur = cur.parent_id ? byId.get(cur.parent_id) : null;
+  }
+  return parts.join(' / ');
+}
+
+async function loadCollections() {
+  try {
+    const data = await GET('/collections');
+    S.collections = data.collections || [];
+    if (!S.collections.length) { S.collections = []; }
+    // Keep the current selection if still present, else default to personal.
+    if (!S.collections.some(c => c.id === S.currentColId)) {
+      const personal = S.collections.find(c => c.is_personal) || S.collections[0];
+      S.currentColId = personal ? personal.id : '';
+    }
+    populateCollectionFilter();
+    await loadFolders();
+    loadBookmarks();
+  } catch (err) {
+    $('bm-list').textContent = t('error') + ': ' + err.message;
+  }
+}
+
+async function loadFolders() {
+  S.folders = [];
+  if (!S.currentColId) { populateFolderFilter(); return; }
+  try {
+    const data = await GET(`/collections/${S.currentColId}/folders`);
+    S.folders = data.folders || [];
+  } catch (_) {
+    S.folders = [];
+  }
+  populateFolderFilter();
+}
+
+function populateCollectionFilter() {
+  const sel = $('bm-collection-filter');
+  sel.innerHTML = '';
+  for (const c of S.collections) {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    const label = c.is_personal ? t('col.personal') : c.name;
+    opt.textContent = c.bookmark_count != null ? `${label} (${c.bookmark_count})` : label;
+    if (c.id === S.currentColId) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  // Rename/delete/share are gated by ownership-level access on a non-personal collection.
+  const col = currentCollection();
+  const editable = !!col && !col.is_personal;
+  const manageable = editable && col.perm === 'manage';
+  toggle('bm-collection-rename', manageable);
+  toggle('bm-collection-delete', manageable);
+  toggle('bm-collection-share', manageable);
+
+  // Write controls require at least edit on the current collection.
+  const canWrite = !col || col.perm !== 'view';
+  toggle('bm-add-btn', canWrite);
+  toggle('bm-folder-new', canWrite);
+}
+
+function populateFolderFilter() {
+  const sel = $('bm-folder-filter');
+  const current = S.bmFolderId;
+  sel.innerHTML = `<option value="">${t('bm.all.folders')}</option>`;
+  for (const f of S.folders) {
+    const opt = document.createElement('option');
+    opt.value = f.id;
+    opt.textContent = folderPath(f.id);
+    if (f.id === current) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
 async function loadBookmarks() {
+  if (!S.currentColId) { S.bookmarks = []; renderBookmarks(); return; }
   const params = new URLSearchParams({
-    offset: S.bmOffset,
-    limit:  S.bmLimit,
+    offset:        S.bmOffset,
+    limit:         S.bmLimit,
+    collection_id: S.currentColId,
   });
-  if (S.bmFilter) params.set('search', S.bmFilter);
-  if (S.bmFolder) params.set('folder', S.bmFolder);
+  if (S.bmFilter)   params.set('search', S.bmFilter);
+  if (S.bmFolderId) params.set('folder_id', S.bmFolderId);
 
   try {
     const data = await GET(`/bookmarks?${params}`);
@@ -916,22 +1016,37 @@ function renderBookmarks() {
     return;
   }
 
-  // Group by folder
+  // Group by folder path (resolved from folder_id)
   const byFolder = new Map();
   const noFolder = [];
   for (const bm of S.bookmarks) {
-    if (bm.folder) {
-      if (!byFolder.has(bm.folder)) byFolder.set(bm.folder, []);
-      byFolder.get(bm.folder).push(bm);
+    if (bm.folder_id) {
+      const path = folderPath(bm.folder_id) || '—';
+      if (!byFolder.has(path)) byFolder.set(path, []);
+      byFolder.get(path).push(bm);
     } else {
       noFolder.push(bm);
     }
   }
 
+  // Map folder path -> folder id, to attach folder actions on section headers.
+  const pathToId = new Map(S.folders.map(f => [folderPath(f.id), f.id]));
+  const col = currentCollection();
+  const canEdit = !col || !col.perm || col.perm !== 'view';
+  S.curCanWrite = canEdit;
+
   // Render folders
   for (const [folder, bms] of [...byFolder.entries()].sort()) {
     const section = el('div', 'bm-section');
-    section.appendChild(el('div', 'bm-section-name', folder));
+    const header = el('div', 'bm-section-name', folder);
+    const fid = pathToId.get(folder);
+    if (fid && canEdit) {
+      const del = el('button', 'icon-btn danger bm-folder-del', '✕');
+      del.title = t('folder.delete');
+      del.onclick = () => deleteFolder(fid);
+      header.appendChild(del);
+    }
+    section.appendChild(header);
     const count = bms.length;
     bms.forEach((bm, i) => {
       section.appendChild(makeBmItem(bm, i < count - 1 ? '├' : '└'));
@@ -964,18 +1079,6 @@ function renderBookmarks() {
     pag.append(prev, info, next);
     list.appendChild(pag);
   }
-
-  // Populate folder filter
-  const sel = $('bm-folder-filter');
-  const current = sel.value;
-  sel.innerHTML = `<option value="">${t('bm.all.folders')}</option>`;
-  for (const f of [...byFolder.keys()].sort()) {
-    const opt = document.createElement('option');
-    opt.value       = f;
-    opt.textContent = f;
-    if (f === current) opt.selected = true;
-    sel.appendChild(opt);
-  }
 }
 
 function makeBmItem(bm, glyph) {
@@ -992,15 +1095,22 @@ function makeBmItem(bm, glyph) {
 
   const actions = el('div', 'bm-actions');
 
-  const editBtn = el('button', 'icon-btn', '✎');
-  editBtn.title = 'Modifier';
-  editBtn.onclick = () => openEditBookmark(bm);
+  if (S.curCanWrite !== false) {
+    const editBtn = el('button', 'icon-btn', '✎');
+    editBtn.title = 'Modifier';
+    editBtn.onclick = () => openEditBookmark(bm);
 
-  const delBtn = el('button', 'icon-btn danger', '✕');
-  delBtn.title = t('btn.delete');
-  delBtn.onclick = () => deleteBookmark(bm.id);
+    const delBtn = el('button', 'icon-btn danger', '✕');
+    delBtn.title = t('btn.delete');
+    delBtn.onclick = () => deleteBookmark(bm.id);
 
-  actions.append(editBtn, delBtn);
+    actions.append(editBtn, delBtn);
+  }
+
+  // For shared collections, show who added the bookmark.
+  if (bm.added_by_username) {
+    actions.appendChild(el('span', 'bm-author', bm.added_by_username));
+  }
   wrap.append(g, link, urlSpan, actions);
 
   // Tags row
@@ -1018,24 +1128,77 @@ function makeBmItem(bm, glyph) {
   return wrap;
 }
 
+// populateModalCollections fills the modal collection <select> with the
+// collections the user can write to (Phase 1: everything owned).
+function populateModalCollections(selectedId) {
+  const sel = $('modal-bm-collection');
+  sel.innerHTML = '';
+  for (const c of S.collections) {
+    if (c.perm && c.perm === 'view') continue; // can't add to read-only collections
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.is_personal ? t('col.personal') : c.name;
+    if (c.id === selectedId) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+// populateModalFolders fills the modal folder <select> from a folder list.
+function populateModalFolders(folders, selectedFolderId) {
+  const sel = $('modal-bm-folder-select');
+  sel.innerHTML = `<option value="">${t('bm.no.folder')}</option>`;
+  const byId = new Map(folders.map(f => [f.id, f]));
+  const pathOf = id => {
+    const parts = []; let cur = byId.get(id); let g = 0;
+    while (cur && g++ < 50) { parts.unshift(cur.name); cur = cur.parent_id ? byId.get(cur.parent_id) : null; }
+    return parts.join(' / ');
+  };
+  for (const f of folders) {
+    const opt = document.createElement('option');
+    opt.value = f.id;
+    opt.textContent = pathOf(f.id);
+    if (f.id === selectedFolderId) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+// onModalCollectionChange reloads the folder list for the chosen collection.
+async function onModalCollectionChange() {
+  const colId = $('modal-bm-collection').value;
+  let folders = [];
+  if (colId === S.currentColId) {
+    folders = S.folders;
+  } else if (colId) {
+    try { folders = (await GET(`/collections/${colId}/folders`)).folders || []; } catch (_) {}
+  }
+  populateModalFolders(folders, '');
+}
+
 function openAddBookmark() {
   S.editingBmId = null;
   $('modal-bm-title').textContent   = t('bm.modal.add');
   $('modal-bm-url').value           = '';
   $('modal-bm-title-input').value   = '';
-  $('modal-bm-folder').value        = '';
+  populateModalCollections(S.currentColId);
+  populateModalFolders(S.folders, S.bmFolderId);
   $('modal-bm-tags').value          = '';
   setError('modal-bm-error', '');
   show('modal-bookmark');
   $('modal-bm-url').focus();
 }
 
-function openEditBookmark(bm) {
+async function openEditBookmark(bm) {
   S.editingBmId = bm.id;
   $('modal-bm-title').textContent   = t('bm.modal.edit');
   $('modal-bm-url').value           = bm.url;
   $('modal-bm-title-input').value   = bm.title;
-  $('modal-bm-folder').value        = bm.folder || '';
+  populateModalCollections(bm.collection_id);
+  // Load the folders of the bookmark's own collection for the folder picker.
+  let folders = S.folders;
+  if (bm.collection_id !== S.currentColId) {
+    try { folders = (await GET(`/collections/${bm.collection_id}/folders`)).folders || []; } catch (_) {}
+  }
+  populateModalFolders(folders, bm.folder_id || '');
   $('modal-bm-tags').value          = (bm.tags || []).map(t => t.name).join(', ');
   setError('modal-bm-error', '');
   show('modal-bookmark');
@@ -1044,10 +1207,11 @@ function openEditBookmark(bm) {
 
 async function saveBookmark() {
   setError('modal-bm-error', '');
-  const url    = $('modal-bm-url').value.trim();
-  const title  = $('modal-bm-title-input').value.trim();
-  const folder = $('modal-bm-folder').value.trim() || null;
-  const tags   = $('modal-bm-tags').value.split(',').map(t => t.trim()).filter(Boolean);
+  const url           = $('modal-bm-url').value.trim();
+  const title         = $('modal-bm-title-input').value.trim();
+  const collection_id = $('modal-bm-collection').value || '';
+  const folder_id     = $('modal-bm-folder-select').value || null;
+  const tags          = $('modal-bm-tags').value.split(',').map(t => t.trim()).filter(Boolean);
 
   if (!url || !title) {
     setError('modal-bm-error', t('bm.url.required'));
@@ -1056,13 +1220,13 @@ async function saveBookmark() {
 
   try {
     if (S.editingBmId) {
-      await PUT(`/bookmarks/${S.editingBmId}`, { url, title, folder, tags });
+      await PUT(`/bookmarks/${S.editingBmId}`, { url, title, collection_id, folder_id, tags });
     } else {
-      await POST('/bookmarks', { url, title, folder, tags });
+      await POST('/bookmarks', { url, title, collection_id, folder_id, tags });
     }
     hide('modal-bookmark');
     S.bmOffset = 0;
-    loadBookmarks();
+    loadCollections();
   } catch (err) {
     setError('modal-bm-error', err.message);
   }
@@ -1107,10 +1271,235 @@ async function importBookmarks(file) {
     if (!r.ok) throw new Error(json.error || 'Import error');
     alert(`${t('bm.import.ok')}: ${json.imported ?? '?'} ${t('bm.import.added')}, ${json.skipped ?? '?'} ${t('bm.import.skipped')}.`);
     S.bmOffset = 0;
-    loadBookmarks();
+    loadCollections();
   } catch (err) {
     alert(err.message);
   }
+}
+
+/* ─── Collections & folders ──────────────────────────────────────────────── */
+async function createCollection() {
+  const name = prompt(t('col.prompt.name'));
+  if (!name || !name.trim()) return;
+  try {
+    const c = await POST('/collections', { name: name.trim() });
+    S.currentColId = c.id;
+    S.bmFolderId = '';
+    loadCollections();
+  } catch (err) { alert(err.message); }
+}
+
+async function renameCollection() {
+  const col = currentCollection();
+  if (!col || col.is_personal) return;
+  const name = prompt(t('col.prompt.rename'), col.name);
+  if (!name || !name.trim()) return;
+  try {
+    await PUT(`/collections/${col.id}`, { name: name.trim() });
+    loadCollections();
+  } catch (err) { alert(err.message); }
+}
+
+async function deleteCollection() {
+  const col = currentCollection();
+  if (!col || col.is_personal) return;
+  if (!confirm(t('col.confirm.delete'))) return;
+  try {
+    await DEL(`/collections/${col.id}`);
+    S.currentColId = '';
+    S.bmFolderId = '';
+    loadCollections();
+  } catch (err) { alert(err.message); }
+}
+
+async function createFolder() {
+  if (!S.currentColId) return;
+  const name = prompt(t('folder.prompt.name'));
+  if (!name || !name.trim()) return;
+  const parent_id = S.bmFolderId || null; // nest under the filtered folder if any
+  try {
+    await POST(`/collections/${S.currentColId}/folders`, { name: name.trim(), parent_id });
+    await loadFolders();
+    loadBookmarks();
+  } catch (err) { alert(err.message); }
+}
+
+async function deleteFolder(id) {
+  if (!confirm(t('folder.confirm.delete'))) return;
+  try {
+    await DEL(`/folders/${id}`);
+    if (S.bmFolderId === id) S.bmFolderId = '';
+    await loadFolders();
+    loadBookmarks();
+  } catch (err) { alert(err.message); }
+}
+
+/* ─── Collection sharing ─────────────────────────────────────────────────── */
+const PERMS = ['view', 'edit', 'manage'];
+
+async function openShareDialog() {
+  const col = currentCollection();
+  if (!col || col.is_personal || col.perm !== 'manage') return;
+  setError('modal-share-error', '');
+  $('share-search').value = '';
+  $('share-results').innerHTML = '';
+  show('modal-share');
+  renderShareList();
+
+  // Public link state comes from the collection detail (carries public_token).
+  const urlBox = $('share-public-url');
+  const toggle = $('share-public-toggle');
+  urlBox.hidden = true; toggle.checked = false;
+  try {
+    const detail = await GET(`/collections/${col.id}`);
+    setPublicUrl(detail.public_token);
+  } catch (_) {}
+}
+
+function setPublicUrl(token) {
+  const urlBox = $('share-public-url');
+  const toggle = $('share-public-toggle');
+  if (token) {
+    toggle.checked = true;
+    urlBox.value = `${location.origin}/s/${token}`;
+    urlBox.hidden = false;
+  } else {
+    toggle.checked = false;
+    urlBox.value = '';
+    urlBox.hidden = true;
+  }
+}
+
+async function onPublicToggle() {
+  const col = currentCollection();
+  if (!col) return;
+  try {
+    const r = await POST(`/collections/${col.id}/public-link`, { enable: $('share-public-toggle').checked });
+    setPublicUrl(r.token);
+  } catch (e) {
+    setError('modal-share-error', e.message);
+    setPublicUrl(null);
+  }
+}
+
+function permSelect(current, onChange) {
+  const sel = el('select', 'form-input form-input-sm');
+  for (const p of PERMS) {
+    const opt = document.createElement('option');
+    opt.value = p; opt.textContent = t('perm.level.' + p);
+    if (p === current) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.onchange = () => onChange(sel.value);
+  return sel;
+}
+
+async function renderShareList() {
+  const col = currentCollection();
+  const box = $('share-list');
+  box.innerHTML = t('loading');
+  try {
+    const [data, groupsData] = await Promise.all([
+      GET(`/collections/${col.id}/shares`),
+      GET('/groups').catch(() => ({ groups: [] })),
+    ]);
+    const shares = data.shares || [];
+    const groupShares = data.group_shares || [];
+    const allGroups = groupsData.groups || [];
+    box.innerHTML = '';
+
+    // User shares.
+    for (const sh of shares) {
+      const row = el('div', 'share-row');
+      row.appendChild(el('span', 'flex-1', '👤 ' + sh.username));
+      row.appendChild(permSelect(sh.perm, async perm => {
+        try { await POST(`/collections/${col.id}/shares`, { user_id: sh.user_id, perm }); }
+        catch (e) { setError('modal-share-error', e.message); }
+      }));
+      const rm = el('button', 'icon-btn danger', '✕');
+      rm.title = t('share.remove');
+      rm.onclick = async () => {
+        try { await DEL(`/collections/${col.id}/shares/${sh.user_id}`); renderShareList(); }
+        catch (e) { setError('modal-share-error', e.message); }
+      };
+      row.appendChild(rm);
+      box.appendChild(row);
+    }
+
+    // Group shares.
+    for (const gs of groupShares) {
+      const row = el('div', 'share-row');
+      row.appendChild(el('span', 'flex-1', '👥 ' + gs.group_name));
+      row.appendChild(permSelect(gs.perm, async perm => {
+        try { await POST(`/collections/${col.id}/group-shares`, { group_id: gs.group_id, perm }); }
+        catch (e) { setError('modal-share-error', e.message); }
+      }));
+      const rm = el('button', 'icon-btn danger', '✕');
+      rm.title = t('share.remove');
+      rm.onclick = async () => {
+        try { await DEL(`/collections/${col.id}/group-shares/${gs.group_id}`); renderShareList(); }
+        catch (e) { setError('modal-share-error', e.message); }
+      };
+      row.appendChild(rm);
+      box.appendChild(row);
+    }
+
+    if (!shares.length && !groupShares.length) {
+      box.appendChild(el('p', 'text-dimmer text-sm', t('share.none')));
+    }
+
+    // Add-a-group picker (groups not already shared).
+    const sharedIds = new Set(groupShares.map(g => g.group_id));
+    const available = allGroups.filter(g => !sharedIds.has(g.id));
+    if (available.length) {
+      const row = el('div', 'share-row');
+      const sel = el('select', 'form-input form-input-sm flex-1');
+      sel.innerHTML = `<option value="">${t('share.group.add')}</option>`;
+      for (const g of available) {
+        const opt = document.createElement('option');
+        opt.value = g.id; opt.textContent = '👥 ' + g.name;
+        sel.appendChild(opt);
+      }
+      const add = el('button', 'btn btn-small btn-secondary', t('share.grant'));
+      add.onclick = async () => {
+        if (!sel.value) return;
+        try { await POST(`/collections/${col.id}/group-shares`, { group_id: sel.value, perm: 'view' }); renderShareList(); }
+        catch (e) { setError('modal-share-error', e.message); }
+      };
+      row.append(sel, add);
+      box.appendChild(row);
+    }
+  } catch (e) { box.textContent = t('error') + ': ' + e.message; }
+}
+
+let shareSearchTimer = null;
+async function onShareSearch() {
+  const q = $('share-search').value.trim();
+  const results = $('share-results');
+  clearTimeout(shareSearchTimer);
+  if (!q) { results.innerHTML = ''; return; }
+  shareSearchTimer = setTimeout(async () => {
+    try {
+      const data = await GET(`/users/search?q=${encodeURIComponent(q)}`);
+      results.innerHTML = '';
+      for (const u of (data.users || [])) {
+        if (u.id === S.user.id) continue;
+        const row = el('div', 'share-result');
+        row.appendChild(el('span', 'flex-1', u.username));
+        const add = el('button', 'btn btn-small btn-secondary', t('share.grant'));
+        add.onclick = async () => {
+          const col = currentCollection();
+          try {
+            await POST(`/collections/${col.id}/shares`, { user_id: u.id, perm: 'view' });
+            $('share-search').value = ''; results.innerHTML = '';
+            renderShareList();
+          } catch (e) { setError('modal-share-error', e.message); }
+        };
+        row.appendChild(add);
+        results.appendChild(row);
+      }
+    } catch (_) {}
+  }, 200);
 }
 
 /* ─── Settings panel ─────────────────────────────────────────────────────── */
@@ -1400,6 +1789,19 @@ function buildEngineTab() {
   }
 
   sec.appendChild(grid);
+
+  // Preference: open searches in a new tab vs the current page.
+  const optRow = el('label', 'policy-row mt-1');
+  const cb = el('input'); cb.type = 'checkbox';
+  cb.checked = !!loadThemePrefs().searchNewTab;
+  cb.onchange = () => {
+    const p = loadThemePrefs();
+    p.searchNewTab = cb.checked;
+    saveThemePrefs(p);
+  };
+  optRow.append(cb, el('span', null, ' ' + t('engine.newtab')));
+  sec.appendChild(optRow);
+
   frag.appendChild(sec);
   return frag;
 }
@@ -1606,6 +2008,13 @@ function buildBookmarkletTab() {
 
 /* ─── Admin panel ────────────────────────────────────────────────────────── */
 function openAdmin() {
+  // Show admin tabs only for the permissions the user actually holds.
+  const tabPerm = { roles: 'roles.manage', settings: 'settings.manage', audit: 'audit.view',
+                    users: 'users.manage', invitations: 'users.manage', groups: 'groups.manage' };
+  document.querySelectorAll('#admin-tabs .tab').forEach(tab => {
+    const perm = tabPerm[tab.dataset.tab];
+    tab.classList.toggle('hidden', !!perm && !can(perm));
+  });
   renderAdminTab('stats');
   show('overlay-admin');
 }
@@ -1625,6 +2034,8 @@ function renderAdminTab(tabName) {
   switch (tabName) {
     case 'stats':       body.appendChild(buildAdminStats());       break;
     case 'users':       body.appendChild(buildAdminUsers());       break;
+    case 'roles':       body.appendChild(buildAdminRoles());       break;
+    case 'groups':      body.appendChild(buildAdminGroups());      break;
     case 'invitations': body.appendChild(buildAdminInvitations()); break;
     case 'settings':    body.appendChild(buildAdminSettings());    break;
     case 'audit':       body.appendChild(buildAdminAudit());       break;
@@ -1676,8 +2087,12 @@ function buildAdminUsers() {
   const list = el('div'); list.id = 'admin-users-list';
   list.textContent = t('loading');
 
-  GET('/admin/users').then(data => {
+  Promise.all([
+    GET('/admin/users'),
+    GET('/admin/roles').catch(() => ({ roles: [] })),
+  ]).then(([data, rolesData]) => {
     const users = data.users || data.items || data || [];
+    const roles = rolesData.roles || [];
     list.innerHTML = '';
     for (const u of users) {
       const row = el('div', 'admin-user-row');
@@ -1685,7 +2100,8 @@ function buildAdminUsers() {
       const nameEl = el('div', 'flex-1');
       const name   = el('span', 'user-name', u.username);
       const email  = el('span', 'user-email', ' · ' + u.email);
-      if (u.role === 'admin') name.innerHTML += '<span class="badge badge-admin">admin</span>';
+      const roleLabel = u.role_name || u.role;
+      if (roleLabel && roleLabel !== 'user') name.innerHTML += `<span class="badge badge-admin">${roleLabel}</span>`;
       if (!u.is_active)       name.innerHTML += '<span class="badge badge-inactive">suspended</span>';
 
       // Stats line (bookmarks / wallpapers / sessions)
@@ -1757,6 +2173,25 @@ function buildAdminUsers() {
       };
       quotaWrap.append(quotaInput, quotaSaveBtn, quotaResetBtn);
 
+      // Role assignment selector (requires users.manage; hidden for self).
+      if (u.id !== S.user.id && roles.length) {
+        const roleSel = el('select', 'form-input form-input-sm');
+        roleSel.title = t('roles.assign');
+        roleSel.style.width = '8rem';
+        for (const role of roles) {
+          const opt = document.createElement('option');
+          opt.value = role.id;
+          opt.textContent = role.name;
+          if (role.id === u.role_id) opt.selected = true;
+          roleSel.appendChild(opt);
+        }
+        roleSel.onchange = async () => {
+          try { await PUT(`/admin/users/${u.id}/role`, { role_id: roleSel.value }); renderAdminTab('users'); }
+          catch (e) { alert(e.message); renderAdminTab('users'); }
+        };
+        acts.appendChild(roleSel);
+      }
+
       if (u.id !== S.user.id) {
         const suspBtn = el('button', 'btn btn-small btn-secondary',
           u.is_active ? t('admin.user.suspend') : t('admin.user.activate'));
@@ -1794,6 +2229,196 @@ function buildAdminUsers() {
   return frag;
 }
 
+function buildAdminRoles() {
+  const frag = document.createDocumentFragment();
+  const list = el('div'); list.id = 'admin-roles-list';
+  list.textContent = t('loading');
+
+  function permCheckboxes(catalog, selected, disabled) {
+    const wrap = el('div', 'role-perms');
+    for (const p of catalog) {
+      const lbl = el('label', 'role-perm');
+      const cb  = el('input');
+      cb.type = 'checkbox'; cb.value = p;
+      cb.checked = selected.includes(p);
+      cb.disabled = !!disabled;
+      lbl.append(cb, el('span', null, ' ' + (t('perm.' + p) !== 'perm.' + p ? t('perm.' + p) : p)));
+      wrap.appendChild(lbl);
+    }
+    return wrap;
+  }
+
+  Promise.all([
+    GET('/admin/roles'),
+    GET('/admin/permissions'),
+  ]).then(([rolesData, permData]) => {
+    const roles   = rolesData.roles || [];
+    const catalog = permData.permissions || [];
+    list.innerHTML = '';
+
+    for (const role of roles) {
+      const card = el('div', 'role-card');
+      const head = el('div', 'role-head');
+      head.appendChild(el('span', 'role-name', role.name));
+      if (role.is_system) head.appendChild(el('span', 'badge badge-system', t('roles.system')));
+      card.appendChild(head);
+
+      const perms = permCheckboxes(catalog, role.permissions || [], role.is_system);
+      card.appendChild(perms);
+
+      if (!role.is_system && can('roles.manage')) {
+        const actions = el('div', 'flex gap-1 mt-1');
+        const save = el('button', 'btn btn-small btn-primary', t('btn.save'));
+        save.onclick = async () => {
+          const selected = [...perms.querySelectorAll('input:checked')].map(c => c.value);
+          try { await PUT(`/admin/roles/${role.id}`, { name: role.name, permissions: selected }); renderAdminTab('roles'); }
+          catch (e) { alert(e.message); }
+        };
+        const del = el('button', 'btn btn-small btn-danger', t('btn.delete'));
+        del.onclick = async () => {
+          if (!confirm(t('roles.confirm.delete'))) return;
+          try { await DEL(`/admin/roles/${role.id}`); renderAdminTab('roles'); }
+          catch (e) { alert(e.message); }
+        };
+        actions.append(save, del);
+        card.appendChild(actions);
+      }
+      list.appendChild(card);
+    }
+
+    // New custom role.
+    if (can('roles.manage')) {
+      const card = el('div', 'role-card');
+      card.appendChild(el('div', 'role-name', t('roles.new')));
+      const nameInput = el('input', 'form-input form-input-sm');
+      nameInput.placeholder = t('roles.name.ph');
+      card.appendChild(nameInput);
+      const perms = permCheckboxes(catalog, [], false);
+      card.appendChild(perms);
+      const create = el('button', 'btn btn-small btn-primary mt-1', t('roles.create'));
+      create.onclick = async () => {
+        const name = nameInput.value.trim();
+        if (!name) return;
+        const selected = [...perms.querySelectorAll('input:checked')].map(c => c.value);
+        try { await POST('/admin/roles', { name, permissions: selected }); renderAdminTab('roles'); }
+        catch (e) { alert(e.message); }
+      };
+      card.appendChild(create);
+      list.appendChild(card);
+    }
+  }).catch(e => { list.textContent = t('error') + ': ' + e.message; });
+
+  frag.append(list);
+  return frag;
+}
+
+function buildAdminGroups() {
+  const frag = document.createDocumentFragment();
+
+  // New group.
+  const newRow = el('div', 'flex gap-1 mb-1');
+  const nameInput = el('input', 'form-input flex-1');
+  nameInput.placeholder = t('groups.name.ph');
+  const addBtn = el('button', 'btn btn-primary', t('groups.create'));
+  addBtn.onclick = async () => {
+    const name = nameInput.value.trim();
+    if (!name) return;
+    try { await POST('/groups', { name }); renderAdminTab('groups'); }
+    catch (e) { alert(e.message); }
+  };
+  newRow.append(nameInput, addBtn);
+  frag.append(newRow);
+
+  const list = el('div'); list.textContent = t('loading');
+  frag.append(list);
+
+  GET('/groups').then(data => {
+    const groups = data.groups || [];
+    list.innerHTML = '';
+    if (!groups.length) { list.appendChild(el('p', 'text-dimmer text-sm', t('groups.none'))); return; }
+    for (const g of groups) {
+      const card = el('div', 'role-card');
+      const head = el('div', 'role-head');
+      head.appendChild(el('span', 'role-name', g.name));
+      head.appendChild(el('span', 'text-sm text-dimmer', `${g.member_count} ${t('groups.members')}`));
+      const renameBtn = el('button', 'btn btn-small btn-secondary', t('col.rename'));
+      renameBtn.onclick = async () => {
+        const n = prompt(t('groups.rename'), g.name);
+        if (!n || !n.trim()) return;
+        try { await PUT(`/groups/${g.id}`, { name: n.trim() }); renderAdminTab('groups'); }
+        catch (e) { alert(e.message); }
+      };
+      const delBtn = el('button', 'btn btn-small btn-danger', t('btn.delete'));
+      delBtn.onclick = async () => {
+        if (!confirm(t('groups.confirm.delete'))) return;
+        try { await DEL(`/groups/${g.id}`); renderAdminTab('groups'); }
+        catch (e) { alert(e.message); }
+      };
+      head.append(renameBtn, delBtn);
+      card.appendChild(head);
+      card.appendChild(buildGroupMembers(g.id));
+      list.appendChild(card);
+    }
+  }).catch(e => { list.textContent = t('error') + ': ' + e.message; });
+
+  return frag;
+}
+
+function buildGroupMembers(groupId) {
+  const wrap = el('div', 'group-members');
+
+  // Add member by username search.
+  const search = el('input', 'form-input form-input-sm');
+  search.placeholder = t('share.search.ph');
+  const results = el('div', 'share-results');
+  let timer = null;
+  search.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = search.value.trim();
+    if (!q) { results.innerHTML = ''; return; }
+    timer = setTimeout(async () => {
+      try {
+        const data = await GET(`/users/search?q=${encodeURIComponent(q)}`);
+        results.innerHTML = '';
+        for (const u of (data.users || [])) {
+          const row = el('div', 'share-result');
+          row.appendChild(el('span', 'flex-1', u.username));
+          const add = el('button', 'btn btn-small btn-secondary', t('share.grant'));
+          add.onclick = async () => {
+            try { await POST(`/groups/${groupId}/members`, { user_id: u.id, role: 'member' });
+                  search.value = ''; results.innerHTML = ''; renderAdminTab('groups'); }
+            catch (e) { alert(e.message); }
+          };
+          row.appendChild(add);
+          results.appendChild(row);
+        }
+      } catch (_) {}
+    }, 200);
+  });
+  wrap.append(search, results);
+
+  const membersBox = el('div'); membersBox.textContent = t('loading');
+  wrap.appendChild(membersBox);
+  GET(`/groups/${groupId}/members`).then(data => {
+    const members = data.members || [];
+    membersBox.innerHTML = '';
+    for (const m of members) {
+      const row = el('div', 'share-row');
+      row.appendChild(el('span', 'flex-1', `${m.username} (${m.role})`));
+      const rm = el('button', 'icon-btn danger', '✕');
+      rm.title = t('share.remove');
+      rm.onclick = async () => {
+        try { await DEL(`/groups/${groupId}/members/${m.user_id}`); renderAdminTab('groups'); }
+        catch (e) { alert(e.message); }
+      };
+      row.appendChild(rm);
+      membersBox.appendChild(row);
+    }
+  }).catch(() => { membersBox.textContent = ''; });
+
+  return wrap;
+}
+
 function auditLabel(action) {
   const key = 'audit.action.' + action;
   const label = t(key);
@@ -1823,6 +2448,37 @@ function buildAdminAudit() {
   }).catch(e => { list.textContent = t('error') + ': ' + e.message; });
 
   frag.appendChild(list);
+  return frag;
+}
+
+function buildAdminPolicies() {
+  const frag = document.createDocumentFragment();
+  frag.append(el('div', 'settings-section-title mt-1', t('policy.title')));
+  frag.append(el('p', 'text-sm text-dim mb-1', t('policy.desc')));
+
+  const keys = [
+    'policy.admin_manage_all_collections',
+    'policy.restrict_collection_creation',
+    'policy.restrict_collection_deletion',
+  ];
+  const box = el('div'); box.textContent = t('loading');
+  frag.append(box);
+
+  GET('/admin/settings/policies').then(data => {
+    const pol = data.policies || {};
+    box.innerHTML = '';
+    for (const k of keys) {
+      const row = el('label', 'policy-row');
+      const cb = el('input'); cb.type = 'checkbox'; cb.checked = !!pol[k];
+      cb.onchange = async () => {
+        try { await PUT('/admin/settings/policies', { key: k, value: cb.checked }); }
+        catch (e) { alert(e.message); cb.checked = !cb.checked; }
+      };
+      row.append(cb, el('span', null, ' ' + t('policy.' + k)));
+      box.appendChild(row);
+    }
+  }).catch(e => { box.textContent = t('error') + ': ' + e.message; });
+
   return frag;
 }
 
@@ -1865,6 +2521,7 @@ function buildAdminSettings() {
   frag.append(title, desc, row, msg);
   frag.append(buildAdminSSO());
   frag.append(buildAdminSystem());
+  frag.append(buildAdminPolicies());
   return frag;
 }
 
@@ -2589,10 +3246,27 @@ document.addEventListener('DOMContentLoaded', () => {
     loadBookmarks();
   });
   $('bm-folder-filter').addEventListener('change', () => {
-    S.bmFolder = $('bm-folder-filter').value;
+    S.bmFolderId = $('bm-folder-filter').value;
     S.bmOffset = 0;
     loadBookmarks();
   });
+  $('bm-collection-filter').addEventListener('change', () => {
+    S.currentColId = $('bm-collection-filter').value;
+    S.bmFolderId = '';
+    S.bmOffset = 0;
+    populateCollectionFilter();
+    loadFolders().then(loadBookmarks);
+  });
+  $('bm-collection-new').addEventListener('click', createCollection);
+  $('bm-collection-rename').addEventListener('click', renameCollection);
+  $('bm-collection-delete').addEventListener('click', deleteCollection);
+  $('bm-collection-share').addEventListener('click', openShareDialog);
+  $('bm-folder-new').addEventListener('click', createFolder);
+  $('modal-bm-collection').addEventListener('change', onModalCollectionChange);
+  $('modal-share-close').addEventListener('click', () => hide('modal-share'));
+  $('share-search').addEventListener('input', onShareSearch);
+  $('share-public-toggle').addEventListener('change', onPublicToggle);
+  $('share-public-url').addEventListener('focus', e => e.target.select());
 
   // Bookmark modal
   $('modal-bm-save').addEventListener('click', saveBookmark);

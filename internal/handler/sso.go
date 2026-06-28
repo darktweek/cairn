@@ -61,7 +61,7 @@ func (h *Handler) SSOCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.setSessionCookie(w, token, sessionMaxAge)
+	h.setSessionCookie(w, token, h.sessionMaxAge)
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 

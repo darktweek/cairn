@@ -238,11 +238,17 @@
         <button class="panel-close" id="bm-close">✕</button>
       </div>
       <div class="bm-filter-bar">
-        <input type="text" id="bm-search-input" class="form-input bm-search-input"
-               data-i18n="bm.search.placeholder" data-i18n-attr="placeholder" placeholder="Filter bookmarks…">
+        <select id="bm-collection-filter" class="form-input bm-folder-select"></select>
+        <button class="btn btn-secondary" id="bm-collection-new" data-i18n="col.new" title="New collection">+ Collection</button>
+        <button class="btn btn-secondary" id="bm-collection-rename" data-i18n="col.rename">Rename</button>
+        <button class="btn btn-secondary" id="bm-collection-share" data-i18n="col.share">Share</button>
+        <button class="btn btn-secondary" id="bm-collection-delete" data-i18n="col.delete">Delete</button>
         <select id="bm-folder-filter" class="form-input bm-folder-select">
           <option value="" data-i18n="bm.all.folders">All folders</option>
         </select>
+        <button class="btn btn-secondary" id="bm-folder-new" data-i18n="folder.new" title="New folder">+ Folder</button>
+        <input type="text" id="bm-search-input" class="form-input bm-search-input"
+               data-i18n="bm.search.placeholder" data-i18n-attr="placeholder" placeholder="Filter bookmarks…">
       </div>
       <div class="panel-body" id="bm-list"></div>
     </div>
@@ -291,6 +297,8 @@
       <div class="tabs" id="admin-tabs">
         <button class="tab active" data-tab="stats" data-i18n="tab.stats">Statistics</button>
         <button class="tab" data-tab="users" data-i18n="tab.users">Users</button>
+        <button class="tab" data-tab="roles" data-i18n="tab.roles">Roles</button>
+        <button class="tab" data-tab="groups" data-i18n="tab.groups">Groups</button>
         <button class="tab" data-tab="invitations" data-i18n="tab.invitations">Invitations</button>
         <button class="tab" data-tab="settings" data-i18n="tab.settings">Settings</button>
         <button class="tab" data-tab="audit" data-i18n="tab.audit">Audit log</button>
@@ -313,9 +321,12 @@
                data-i18n="bm.modal.title.ph" data-i18n-attr="placeholder" placeholder="Bookmark title">
       </div>
       <div class="form-group">
-        <label class="form-label" for="modal-bm-folder" data-i18n="bm.modal.folder">Folder</label>
-        <input type="text" id="modal-bm-folder" class="form-input"
-               data-i18n="bm.modal.folder.ph" data-i18n-attr="placeholder" placeholder="Dev/Go  (leave empty for none)">
+        <label class="form-label" for="modal-bm-collection" data-i18n="bm.modal.collection">Collection</label>
+        <select id="modal-bm-collection" class="form-input"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="modal-bm-folder-select" data-i18n="bm.modal.folder">Folder</label>
+        <select id="modal-bm-folder-select" class="form-input"></select>
       </div>
       <div class="form-group">
         <label class="form-label" for="modal-bm-tags" data-i18n="bm.modal.tags">Tags</label>
@@ -326,6 +337,34 @@
       <div class="modal-footer">
         <button type="button" id="modal-bm-cancel" class="btn btn-secondary" data-i18n="btn.cancel">Cancel</button>
         <button type="button" id="modal-bm-save" class="btn btn-primary" data-i18n="btn.save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Collection share modal ── -->
+  <div id="modal-share" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-title" data-i18n="share.title">Share collection</div>
+      <div class="form-group">
+        <label class="form-label" data-i18n="share.add">Add people</label>
+        <input type="text" id="share-search" class="form-input"
+               data-i18n="share.search.ph" data-i18n-attr="placeholder" placeholder="Search username…">
+        <div id="share-results" class="share-results"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" data-i18n="share.current">People with access</label>
+        <div id="share-list"></div>
+      </div>
+      <div class="form-group">
+        <label class="policy-row">
+          <input type="checkbox" id="share-public-toggle">
+          <span data-i18n="share.public">Public read-only link</span>
+        </label>
+        <input type="text" id="share-public-url" class="form-input form-input-sm" readonly hidden>
+      </div>
+      <div id="modal-share-error" class="error-msg"></div>
+      <div class="modal-footer">
+        <button type="button" id="modal-share-close" class="btn btn-secondary" data-i18n="btn.close">Close</button>
       </div>
     </div>
   </div>

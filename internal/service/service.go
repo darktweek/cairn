@@ -9,6 +9,9 @@ type Services struct {
 	Auth       AuthService
 	User       UserService
 	Bookmark   BookmarkService
+	Collection CollectionService
+	Group      GroupService
+	RBAC       RBACService
 	Wallpaper  WallpaperService
 	Admin      AdminService
 	Email      EmailService
@@ -25,6 +28,9 @@ func New(repos *repository.Repositories, cfg *config.Config) *Services {
 		Auth:       auth,
 		User:       newUserService(repos, cfg),
 		Bookmark:   newBookmarkService(repos, cfg, auth),
+		Collection: newCollectionService(repos, email),
+		Group:      newGroupService(repos),
+		RBAC:       newRBACService(repos),
 		Wallpaper:  newWallpaperService(repos, cfg, settings),
 		Admin:      newAdminService(repos, cfg, email),
 		Email:      email,

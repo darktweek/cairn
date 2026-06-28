@@ -12,25 +12,30 @@ import (
 )
 
 type BookmarkFilter struct {
-	Folder *string
-	TagID  *string
-	Search string
-	Offset int
-	Limit  int
+	CollectionID *string
+	FolderID     *string
+	TagID        *string
+	Search       string
+	Offset       int
+	Limit        int
 }
 
 type BookmarkRepository interface {
 	Create(ctx context.Context, bookmark *model.Bookmark) error
-	GetByID(ctx context.Context, id, userID string) (*model.Bookmark, error)
+	GetByID(ctx context.Context, id string) (*model.Bookmark, error)
 	Update(ctx context.Context, bookmark *model.Bookmark) error
-	Delete(ctx context.Context, id, userID string) error
+	Delete(ctx context.Context, id string) error
+	// ListByUser lists the bookmarks a user authored (start-page view).
 	ListByUser(ctx context.Context, userID string, filter BookmarkFilter) ([]*model.Bookmark, int, error)
-	UpdateSort(ctx context.Context, userID string, ids []string) error
+	// ListByCollection lists every bookmark in a collection regardless of author
+	// (shared-collection view). Access is enforced by the service layer.
+	ListByCollection(ctx context.Context, collectionID string, filter BookmarkFilter) ([]*model.Bookmark, int, error)
+	UpdateSort(ctx context.Context, ids []string) error
 	CountByUser(ctx context.Context, userID string) (int, error)
 	AddTag(ctx context.Context, bookmarkID, tagID string) error
 	RemoveTag(ctx context.Context, bookmarkID, tagID string) error
 	SetTags(ctx context.Context, bookmarkID string, tagIDs []string) error
-	BulkCreate(ctx context.Context, userID string, bookmarks []*model.Bookmark) error
+	BulkCreate(ctx context.Context, bookmarks []*model.Bookmark) error
 }
 
 type sqliteBookmarkRepo struct {
@@ -41,11 +46,13 @@ func newSQLiteBookmarkRepo(db *sql.DB) BookmarkRepository {
 	return &sqliteBookmarkRepo{db: db}
 }
 
+const bookmarkCols = `id, user_id, collection_id, folder_id, url, title, sort, created_at, updated_at`
+
 func (r *sqliteBookmarkRepo) Create(ctx context.Context, b *model.Bookmark) error {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO bookmarks (id, user_id, url, title, folder, sort, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		b.ID, b.UserID, b.URL, b.Title, b.Folder, b.Sort,
+		INSERT INTO bookmarks (id, user_id, collection_id, folder_id, url, title, sort, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		b.ID, b.UserID, b.CollectionID, b.FolderID, b.URL, b.Title, b.Sort,
 		b.CreatedAt.Unix(), b.UpdatedAt.Unix(),
 	)
 	if err != nil {
@@ -54,10 +61,9 @@ func (r *sqliteBookmarkRepo) Create(ctx context.Context, b *model.Bookmark) erro
 	return nil
 }
 
-func (r *sqliteBookmarkRepo) GetByID(ctx context.Context, id, userID string) (*model.Bookmark, error) {
-	row := r.db.QueryRowContext(ctx, `
-		SELECT id, user_id, url, title, folder, sort, created_at, updated_at
-		FROM bookmarks WHERE id = ? AND user_id = ?`, id, userID)
+func (r *sqliteBookmarkRepo) GetByID(ctx context.Context, id string) (*model.Bookmark, error) {
+	row := r.db.QueryRowContext(ctx,
+		`SELECT `+bookmarkCols+` FROM bookmarks WHERE id = ?`, id)
 	b, err := scanBookmark(row)
 	if err != nil {
 		return nil, err
@@ -70,36 +76,49 @@ func (r *sqliteBookmarkRepo) GetByID(ctx context.Context, id, userID string) (*m
 
 func (r *sqliteBookmarkRepo) Update(ctx context.Context, b *model.Bookmark) error {
 	_, err := r.db.ExecContext(ctx, `
-		UPDATE bookmarks SET url = ?, title = ?, folder = ?, sort = ?, updated_at = ?
-		WHERE id = ? AND user_id = ?`,
-		b.URL, b.Title, b.Folder, b.Sort, b.UpdatedAt.Unix(), b.ID, b.UserID,
+		UPDATE bookmarks SET collection_id = ?, folder_id = ?, url = ?, title = ?, sort = ?, updated_at = ?
+		WHERE id = ?`,
+		b.CollectionID, b.FolderID, b.URL, b.Title, b.Sort, b.UpdatedAt.Unix(), b.ID,
 	)
 	return err
 }
 
-func (r *sqliteBookmarkRepo) Delete(ctx context.Context, id, userID string) error {
-	_, err := r.db.ExecContext(ctx,
-		`DELETE FROM bookmarks WHERE id = ? AND user_id = ?`, id, userID)
+func (r *sqliteBookmarkRepo) Delete(ctx context.Context, id string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM bookmarks WHERE id = ?`, id)
 	return err
 }
 
 func (r *sqliteBookmarkRepo) ListByUser(ctx context.Context, userID string, f BookmarkFilter) ([]*model.Bookmark, int, error) {
-	args := []any{userID}
-	where := []string{"user_id = ?"}
+	return r.list(ctx, "bookmarks.user_id = ?", userID, f, false)
+}
 
-	if f.Folder != nil {
-		where = append(where, "folder = ?")
-		args = append(args, *f.Folder)
+func (r *sqliteBookmarkRepo) ListByCollection(ctx context.Context, collectionID string, f BookmarkFilter) ([]*model.Bookmark, int, error) {
+	return r.list(ctx, "bookmarks.collection_id = ?", collectionID, f, true)
+}
+
+// list is the shared query builder. baseCond is the mandatory scoping clause
+// ("bookmarks.user_id = ?" or "bookmarks.collection_id = ?") with its single arg.
+func (r *sqliteBookmarkRepo) list(ctx context.Context, baseCond, baseArg string, f BookmarkFilter, withAuthor bool) ([]*model.Bookmark, int, error) {
+	args := []any{baseArg}
+	where := []string{baseCond}
+
+	if f.CollectionID != nil {
+		where = append(where, "bookmarks.collection_id = ?")
+		args = append(args, *f.CollectionID)
+	}
+	if f.FolderID != nil {
+		where = append(where, "bookmarks.folder_id = ?")
+		args = append(args, *f.FolderID)
 	}
 	if f.Search != "" {
-		where = append(where, "(title LIKE ? OR url LIKE ?)")
+		where = append(where, "(bookmarks.title LIKE ? OR bookmarks.url LIKE ?)")
 		term := "%" + f.Search + "%"
 		args = append(args, term, term)
 	}
 
-	baseQuery := "FROM bookmarks"
+	from := "FROM bookmarks"
 	if f.TagID != nil {
-		baseQuery = "FROM bookmarks JOIN bookmark_tags bt ON bt.bookmark_id = bookmarks.id"
+		from += " JOIN bookmark_tags bt ON bt.bookmark_id = bookmarks.id"
 		where = append(where, "bt.tag_id = ?")
 		args = append(args, *f.TagID)
 	}
@@ -110,16 +129,21 @@ func (r *sqliteBookmarkRepo) ListByUser(ctx context.Context, userID string, f Bo
 	countArgs := make([]any, len(args))
 	copy(countArgs, args)
 	if err := r.db.QueryRowContext(ctx,
-		"SELECT COUNT(*) "+baseQuery+whereClause, countArgs...,
+		"SELECT COUNT(*) "+from+whereClause, countArgs...,
 	).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("bookmark list count: %w", err)
 	}
 
+	selectCols := "SELECT " + qualify(bookmarkCols)
+	if withAuthor {
+		selectCols += ", u.username"
+		from += " JOIN users u ON u.id = bookmarks.user_id"
+	}
+
 	args = append(args, f.Limit, f.Offset)
 	rows, err := r.db.QueryContext(ctx,
-		"SELECT id, user_id, url, title, folder, sort, created_at, updated_at "+
-			baseQuery+whereClause+
-			" ORDER BY sort ASC, created_at DESC LIMIT ? OFFSET ?",
+		selectCols+" "+from+whereClause+
+			" ORDER BY bookmarks.sort ASC, bookmarks.created_at DESC LIMIT ? OFFSET ?",
 		args...,
 	)
 	if err != nil {
@@ -129,7 +153,12 @@ func (r *sqliteBookmarkRepo) ListByUser(ctx context.Context, userID string, f Bo
 
 	var bookmarks []*model.Bookmark
 	for rows.Next() {
-		b, err := scanBookmark(rows)
+		var b *model.Bookmark
+		if withAuthor {
+			b, err = scanBookmarkWithAuthor(rows)
+		} else {
+			b, err = scanBookmark(rows)
+		}
 		if err != nil {
 			return nil, 0, err
 		}
@@ -148,7 +177,7 @@ func (r *sqliteBookmarkRepo) ListByUser(ctx context.Context, userID string, f Bo
 	return bookmarks, total, nil
 }
 
-func (r *sqliteBookmarkRepo) UpdateSort(ctx context.Context, userID string, ids []string) error {
+func (r *sqliteBookmarkRepo) UpdateSort(ctx context.Context, ids []string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -157,7 +186,7 @@ func (r *sqliteBookmarkRepo) UpdateSort(ctx context.Context, userID string, ids 
 
 	for i, id := range ids {
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE bookmarks SET sort = ? WHERE id = ? AND user_id = ?`, i, id, userID,
+			`UPDATE bookmarks SET sort = ? WHERE id = ?`, i, id,
 		); err != nil {
 			return fmt.Errorf("bookmark update sort: %w", err)
 		}
@@ -213,7 +242,7 @@ func (r *sqliteBookmarkRepo) SetTags(ctx context.Context, bookmarkID string, tag
 	return tx.Commit()
 }
 
-func (r *sqliteBookmarkRepo) BulkCreate(ctx context.Context, userID string, bookmarks []*model.Bookmark) error {
+func (r *sqliteBookmarkRepo) BulkCreate(ctx context.Context, bookmarks []*model.Bookmark) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -221,8 +250,8 @@ func (r *sqliteBookmarkRepo) BulkCreate(ctx context.Context, userID string, book
 	defer tx.Rollback()
 
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT OR IGNORE INTO bookmarks (id, user_id, url, title, folder, sort, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+		INSERT OR IGNORE INTO bookmarks (id, user_id, collection_id, folder_id, url, title, sort, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -230,7 +259,7 @@ func (r *sqliteBookmarkRepo) BulkCreate(ctx context.Context, userID string, book
 
 	for _, b := range bookmarks {
 		if _, err := stmt.ExecContext(ctx,
-			b.ID, b.UserID, b.URL, b.Title, b.Folder, b.Sort,
+			b.ID, b.UserID, b.CollectionID, b.FolderID, b.URL, b.Title, b.Sort,
 			b.CreatedAt.Unix(), b.UpdatedAt.Unix(),
 		); err != nil {
 			return fmt.Errorf("bulk create bookmark: %w", err)
@@ -260,21 +289,50 @@ func (r *sqliteBookmarkRepo) loadTags(ctx context.Context, b *model.Bookmark) er
 	return rows.Err()
 }
 
+// qualify prefixes each comma-separated column with the bookmarks table alias.
+func qualify(cols string) string {
+	parts := strings.Split(cols, ", ")
+	for i, p := range parts {
+		parts[i] = "bookmarks." + p
+	}
+	return strings.Join(parts, ", ")
+}
+
 func scanBookmark(s scanner) (*model.Bookmark, error) {
 	var b model.Bookmark
-	var folder sql.NullString
+	var folderID sql.NullString
 	var createdAt, updatedAt int64
 
-	err := s.Scan(&b.ID, &b.UserID, &b.URL, &b.Title, &folder, &b.Sort, &createdAt, &updatedAt)
+	err := s.Scan(&b.ID, &b.UserID, &b.CollectionID, &folderID, &b.URL, &b.Title, &b.Sort, &createdAt, &updatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("scan bookmark: %w", err)
 	}
+	if folderID.Valid {
+		b.FolderID = &folderID.String
+	}
+	b.CreatedAt = time.Unix(createdAt, 0)
+	b.UpdatedAt = time.Unix(updatedAt, 0)
+	return &b, nil
+}
 
-	if folder.Valid {
-		b.Folder = &folder.String
+func scanBookmarkWithAuthor(s scanner) (*model.Bookmark, error) {
+	var b model.Bookmark
+	var folderID sql.NullString
+	var createdAt, updatedAt int64
+
+	err := s.Scan(&b.ID, &b.UserID, &b.CollectionID, &folderID, &b.URL, &b.Title, &b.Sort,
+		&createdAt, &updatedAt, &b.AddedByUsername)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("scan bookmark: %w", err)
+	}
+	if folderID.Valid {
+		b.FolderID = &folderID.String
 	}
 	b.CreatedAt = time.Unix(createdAt, 0)
 	b.UpdatedAt = time.Unix(updatedAt, 0)

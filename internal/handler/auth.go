@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	sessionCookieName = "cairn_session"
-	sessionMaxAge     = 30 * 24 * 60 * 60 // 30 days in seconds
+	sessionCookieName    = "cairn_session"
+	defaultSessionMaxAge = 30 * 24 * 60 * 60 // 30 days in seconds
 )
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +57,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.setSessionCookie(w, token, sessionMaxAge)
+	h.setSessionCookie(w, token, h.sessionMaxAge)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"session_id": sess.ID,
 		"expires_at": sess.ExpiresAt.Unix(),

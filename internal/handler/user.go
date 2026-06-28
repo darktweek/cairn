@@ -18,6 +18,8 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 		"username":          user.Username,
 		"email":             user.Email,
 		"role":              user.Role,
+		"role_name":         user.RoleName,
+		"permissions":       user.Permissions,
 		"is_active":         user.IsActive,
 		"search_engine":     user.SearchEngine,
 		"search_engine_url": user.SearchEngineURL,

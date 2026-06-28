@@ -41,6 +41,8 @@ type EmailService interface {
 	SendAccountSetup(ctx context.Context, email, username, setupURL string, expiresAt time.Time) error
 	// SendTestEmail sends a plain test message to `to` to verify SMTP settings.
 	SendTestEmail(ctx context.Context, to string) error
+	// SendCollectionShared notifies a user that a collection was shared with them.
+	SendCollectionShared(ctx context.Context, email, sharer, collectionName string) error
 }
 
 type emailService struct {
@@ -156,6 +158,20 @@ func (s *emailService) SendTestEmail(ctx context.Context, to string) error {
 			return fmt.Errorf("%w: SMTP non configuré", ErrInvalidInput)
 		}
 		return err
+	}
+	return nil
+}
+
+func (s *emailService) SendCollectionShared(ctx context.Context, email, sharer, collectionName string) error {
+	body := fmt.Sprintf(`<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:480px;margin:40px auto;padding:20px">`+
+		`<h2 style="color:#1a1a2e">Une collection a été partagée avec vous — Cairn</h2>`+
+		`<p><strong>%s</strong> a partagé la collection « <strong>%s</strong> » avec vous.</p>`+
+		`<p><a href="%s" style="color:#4f46e5">Ouvrir Cairn</a></p>`+
+		`<p style="color:#888;font-size:12px">Vous recevez cet email car votre compte Cairn a reçu un accès partagé.</p>`+
+		`</body></html>`,
+		template.HTMLEscapeString(sharer), template.HTMLEscapeString(collectionName), s.cfg.BaseURL)
+	if err := s.send(ctx, email, "Collection partagée — Cairn", body); err != nil && !errors.Is(err, ErrSMTPNotConfigured) {
+		slog.Error("send collection shared email", "err", err)
 	}
 	return nil
 }

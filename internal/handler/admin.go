@@ -19,6 +19,8 @@ func userJSON(u *model.User) map[string]any {
 		"username":      u.Username,
 		"email":         u.Email,
 		"role":          u.Role,
+		"role_id":       u.RoleID,
+		"role_name":     u.RoleName,
 		"is_active":     u.IsActive,
 		"search_engine": u.SearchEngine,
 		"created_at":    u.CreatedAt.Unix(),
