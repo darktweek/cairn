@@ -35,11 +35,14 @@ Type `!menu` (or your configured bang) for the full-screen hub.
 | **Clock & date** | Large italic clock, ISO week number |
 | **Wallpapers** | Images & videos, pin favorite, random rotation, adaptive light/dark theme via luminance sampling |
 | **Ambient effects** | Rain and dust canvas animations (opt-in per-user) |
-| **Search** | DuckDuckGo by default — Google, Brave, Bing, Kagi, or custom URL |
+| **Search** | DuckDuckGo by default — Google, Brave, Bing, Kagi, or custom URL; per-user "open in new tab" option |
 | **Bangs** | `!bm` bookmarks, `!g` Google, `!yt` YouTube, `!gh` GitHub, `!hub` full menu, + all DDG bangs |
-| **Bookmarks** | Folders, tags, import/export Netscape format (Chrome/Firefox/Safari/Edge), mobile bookmarklet |
-| **TOTP / 2FA** | Mandatory on account creation — RFC 6238, server-generated QR code, works with any authenticator app |
-| **Multi-user** | First account created becomes admin automatically |
+| **Bookmarks** | Collections with a nested folder tree, tags, import/export Netscape format (Chrome/Firefox/Safari/Edge), mobile bookmarklet |
+| **Collaboration** | Share collections with individual users or whole groups — `view` / `edit` / `manage` permission levels, "shared" indicators, optional email notification |
+| **Roles & permissions (RBAC)** | Bitwarden-style roles over a granular permission catalog; seeded `owner` / `admin` / `user` plus custom roles; a user can hold **several** roles (effective permissions = union) |
+| **Groups / teams** | Bundle users into groups and grant a whole team access to a collection |
+| **TOTP / 2FA** | RFC 6238, server-generated QR code, secrets encrypted at rest — enforced for invited / email-verified signups |
+| **Multi-user** | First account created becomes the instance **owner** automatically |
 | **Invitations** | Admin sends invite links by email with delivery confirmation; open registration toggle |
 | **SSO / OIDC** | OpenID Connect (Authentik, Keycloak, Authelia, Google…) — JIT account provisioning |
 | **Admin panel** | User management, storage quotas, upload limits, SMTP test, audit log, pending registrations |
@@ -201,10 +204,13 @@ Use the **Test** button in Admin → Settings → SMTP to verify delivery before
 
 | Variable | Default | Description |
 |---|---|---|
-| `CAIRN_TRUSTED_PROXY` | `true` | Read real IP from `CF-Connecting-IP` / `X-Forwarded-For` |
+| `CAIRN_OPEN_REGISTRATION` | `true` | Allow public self-registration. **Set to `false` for any public-facing instance** — see [Security](#security) |
+| `CAIRN_SESSION_LIFETIME_DAYS` | `30` | Browser session lifetime, in days (drives both the DB session and the cookie max-age) |
+| `CAIRN_INVITE_LIFETIME` | `72` | Invitation link lifetime, in hours |
+| `CAIRN_TRUSTED_PROXY` | `true` | Trust `X-Forwarded-For` for the client IP. Keep `true` **only** behind a reverse proxy; set `false` if Cairn is exposed directly |
 | `CAIRN_MENU_BANG` | — | Bang that opens the full-screen menu (default `!menu`, editable in admin if not set here) |
 | `CAIRN_TOTP_ISSUER` | `Cairn` | Name shown in your authenticator app |
-| `CAIRN_BOOKMARKLET_TOKEN_LIFETIME` | `90` | Bookmarklet token lifetime in days |
+| `CAIRN_BOOKMARKLET_TOKEN_LIFETIME` | `90` | Bookmarklet token lifetime in days (a bookmarklet token is a full-access session token — revoke from the account panel if leaked) |
 
 ---
 
@@ -277,10 +283,33 @@ Save any page in one click from any browser, including mobile Safari:
 
 ## Registrations & invitations
 
-By default, registration is **invite-only**. The admin sends an invite link by email.  
-Open registration (anyone can request an account) can be toggled in **Admin → Settings → Registration**.
+Registration is controlled by `CAIRN_OPEN_REGISTRATION` (and the **Admin → Settings → Registration** toggle).
 
-When open registration is enabled, users submit their email and the admin approves or revokes pending requests from **Admin → Invitations**.
+- **Invite-only (recommended):** the admin sends invite links by email; invited signups are **TOTP-enforced**.
+- **Open registration:** anyone can self-register with username + email + password. These accounts are **password-only** (no TOTP, no email verification).
+
+> ⚠️ The **first account created becomes the instance `owner`** (full control). Create your owner account **before** exposing Cairn, and disable open registration for any public-facing instance — see [Security](#security).
+
+---
+
+## Collaboration, roles & permissions
+
+Cairn ships a Bitwarden-style authorization model with two independent layers.
+
+**Collections & sharing.** Bookmarks live in *collections* (each with a nested folder tree). Every user has one personal collection. Any other collection can be shared with:
+
+- **individual users**, or
+- **groups** (teams),
+
+at one of three permission levels: **view** (read-only), **edit** (add/modify/delete bookmarks & folders), or **manage** (edit + manage the collection's shares). The collection picker marks shared collections with a 👥 indicator. Sharing can optionally email the new collaborator.
+
+**Instance roles (RBAC).** What a user may do at the system level is governed by *roles*, each a bundle of fine-grained permissions from a fixed catalog:
+
+`audit.view` · `bookmarks.import_export` · `collections.create` · `collections.manage_all` · `collections.delete_any` · `groups.manage` · `users.manage` · `settings.manage` · `roles.manage`
+
+Three system roles are seeded — **owner** (all permissions), **admin** (day-to-day administration), **user** (no instance permissions) — and admins with `roles.manage` can create **custom roles** from **Admin → Roles**. A user can hold **multiple roles**; their effective permissions are the union. Guard-rails: an actor can only grant permissions they hold, can't strip the last owner, and can't modify a user more privileged than themselves.
+
+**GDPR / privacy policies.** Under **Admin → Settings**, three opt-in policies (all **off** by default) let you: allow admins to manage *all* collections (logged in the audit trail), restrict collection creation, and restrict collection deletion. By default an admin **cannot** see other users' private collections.
 
 ---
 
@@ -310,9 +339,9 @@ cairn/
 │   ├── db/             — SQLite setup + embedded goose migrations
 │   ├── model/          — data structs
 │   ├── repository/     — database access (interfaces + SQLite implementations)
-│   ├── service/        — business logic (auth, bookmarks, wallpapers, admin…)
+│   ├── service/        — business logic (auth, bookmarks, collections, rbac, groups, wallpapers, admin…)
 │   ├── handler/        — HTTP JSON handlers
-│   └── middleware/     — auth, admin, rate limit, CORS, headers, bookmarklet
+│   └── middleware/     — auth, permission/RBAC, rate limit, CORS, headers, bookmarklet
 ├── web/static/
 │   ├── index.html      — HTML shell
 │   ├── style.css       — styles (CSS variables, adaptive theme)
@@ -329,16 +358,32 @@ cairn/
 | Area | Implementation |
 |---|---|
 | Passwords | Argon2id (time=1, memory=64 MB, threads=4) |
-| Sessions | SHA-256 hashed tokens, `HttpOnly` + `Secure` + `SameSite=Strict` cookies |
-| TOTP | Mandatory on signup — RFC 6238, server-generated QR code, secrets encrypted AES-256-GCM at rest |
-| Rate limiting | Two-layer: per-account (10/5 min) + per-IP fallback (30/5 min) |
-| User isolation | `userID` checked on every repository call; media served behind auth |
+| Sessions | SHA-256 hashed tokens, `HttpOnly` + `Secure` + `SameSite=Strict` cookies, configurable lifetime |
+| TOTP | RFC 6238 for invited/email-verified signups — server-generated QR code, secrets encrypted AES-256-GCM at rest |
+| Rate limiting | Two-layer: per-account (10/5 min) + per-IP fallback (30/5 min); register/forgot 3/hour |
+| Authorization | Permission-checked admin routes; RBAC anti-escalation (grant only what you hold), last-owner guard, no modifying a more-privileged user; collection ACL enforced server-side (`view`/`edit`/`manage`), forbidden/unknown returns `404` to hide existence |
+| User isolation | Data scoped per user / per collection; media served behind auth and path-traversal-safe |
+| CORS | Locked to `CAIRN_BASE_URL`; cross-origin requests get no `Access-Control-Allow-Origin` |
+| Dependencies | `govulncheck` clean; pure-Go, zero CGO |
 | Uploads | Magic bytes validated, server-generated filenames |
 | Container | `scratch` base, read-only FS, `no-new-privileges`, `CAP_DROP ALL` |
 | HTTP headers | CSP, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy` |
 | Audit log | All security events logged (login, logout, password change, TOTP, account lifecycle, admin actions) |
 | GDPR | Hard delete purges all user data and media; audit entries retain username in metadata, `user_id` set to NULL |
 | Email TLS | Port 465 → implicit TLS (SMTPS); port 587 → STARTTLS upgrade |
+
+### Hardening a public-facing instance
+
+Before exposing Cairn to the internet:
+
+1. **Create your owner account first**, then set `CAIRN_OPEN_REGISTRATION=false` (the first registrant becomes owner).
+2. Serve **over HTTPS behind a reverse proxy** so session cookies are `Secure`; let the proxy add HSTS.
+3. Keep `CAIRN_TRUSTED_PROXY=true` **only** behind that proxy — otherwise set it to `false` to prevent `X-Forwarded-For` spoofing.
+4. Use a strong random `CAIRN_SESSION_SECRET` (≥ 32 chars, e.g. `openssl rand -base64 32`).
+5. Consider a shorter session: `CAIRN_SESSION_LIFETIME_DAYS=7`.
+6. Prefer **invitations** (TOTP-enforced) over open registration.
+
+A full pre-release review (auth, sessions, RBAC/ACL, injection, XSS, CSRF, SSRF, headers, uploads, dependencies) is summarised in [`SECURITY.md`](SECURITY.md).
 
 ---
 
