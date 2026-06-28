@@ -118,6 +118,13 @@ func (s *userService) Register(ctx context.Context, username, email, password, i
 		CreatedAt: now,
 	})
 
+	// Safer-by-default: once the first account (the instance owner) exists,
+	// auto-disable open registration so a freshly-exposed public instance can't
+	// be hijacked by a later signup. An admin can re-enable it in Admin → Settings.
+	if isFirst {
+		_ = s.repos.Settings.Set(ctx, "open_registration", "false")
+	}
+
 	return user, nil
 }
 

@@ -288,7 +288,7 @@ Registration is controlled by `CAIRN_OPEN_REGISTRATION` (and the **Admin → Set
 - **Invite-only (recommended):** the admin sends invite links by email; invited signups are **TOTP-enforced**.
 - **Open registration:** anyone can self-register with username + email + password. These accounts are **password-only** (no TOTP, no email verification).
 
-> ⚠️ The **first account created becomes the instance `owner`** (full control). Create your owner account **before** exposing Cairn, and disable open registration for any public-facing instance — see [Security](#security).
+> ⚠️ The **first account created becomes the instance `owner`** (full control). Open registration **auto-disables once that first account exists**, so create your owner account first. For a public-facing instance, also start with `CAIRN_OPEN_REGISTRATION=false` — see [Security](#security).
 
 ---
 
@@ -376,7 +376,7 @@ cairn/
 
 Before exposing Cairn to the internet:
 
-1. **Create your owner account first**, then set `CAIRN_OPEN_REGISTRATION=false` (the first registrant becomes owner).
+1. **Create your owner account first** — open registration auto-disables once it exists. For belt-and-braces, also set `CAIRN_OPEN_REGISTRATION=false`.
 2. Serve **over HTTPS behind a reverse proxy** so session cookies are `Secure`; let the proxy add HSTS.
 3. Keep `CAIRN_TRUSTED_PROXY=true` **only** behind that proxy — otherwise set it to `false` to prevent `X-Forwarded-For` spoofing.
 4. Use a strong random `CAIRN_SESSION_SECRET` (≥ 32 chars, e.g. `openssl rand -base64 32`).

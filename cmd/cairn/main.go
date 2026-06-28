@@ -130,12 +130,15 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 	r.Use(chimw.Recoverer)
 	r.Use(middleware.SecureHeaders)
 	r.Use(middleware.CORS(cfg.BaseURL, cfg.Env))
-	// Global body cap — the wallpaper upload route is excluded because its
-	// limit is per-user (UserBodyLimit below) and may exceed the global default.
+	// Global body cap. JSON APIs are capped tight (1 MB); the two routes that
+	// legitimately accept large bodies — wallpaper upload and bookmark import —
+	// are excluded here and set their own (bigger) limit further down.
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			if !(req.Method == http.MethodPost && req.URL.Path == "/api/wallpapers") {
-				req.Body = http.MaxBytesReader(w, req.Body, cfg.MaxUploadSize)
+			largeUpload := req.Method == http.MethodPost &&
+				(req.URL.Path == "/api/wallpapers" || req.URL.Path == "/api/bookmarks/import")
+			if !largeUpload {
+				req.Body = http.MaxBytesReader(w, req.Body, 1<<20) // 1 MB for JSON
 			}
 			next.ServeHTTP(w, req)
 		})

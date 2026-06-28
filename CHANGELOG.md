@@ -3,6 +3,19 @@
 All notable changes to Cairn are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are date-stamped.
 
+## v0.2.1 — Security hardening — 2026-06-28
+
+### Security
+- Open registration **auto-disables once the first (owner) account exists**,
+  closing the "first signup wins owner" race on a freshly-exposed instance.
+  An admin can re-enable it from Admin → Settings.
+- JSON request bodies are capped at 1 MB (the wallpaper-upload and bookmark-
+  import routes keep their own larger limits).
+
+### Repo
+- Stopped tracking local artifacts (`.DS_Store`, `.claude/`) and extended
+  `.gitignore` ahead of going public.
+
 ## v0.2.0 — Collaboration & RBAC — 2026-06-28
 
 The big one: bookmark collaboration and a Bitwarden-style authorization model.

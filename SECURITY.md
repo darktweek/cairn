@@ -39,8 +39,12 @@ CVEs (`govulncheck`). No critical code-level findings. Items addressed:
 - **Fixed** — an actor can no longer modify a user holding permissions they
   lack (privilege guard added to role assignment).
 - **Fixed** — role badges no longer use `innerHTML` (defence in depth).
-- **Config** — open registration + first-user-becomes-owner: see hardening
-  below. The public read-only share-link feature was removed entirely.
+- **Fixed** — JSON request bodies are capped at 1 MB (uploads/imports keep
+  their own larger limits).
+- **Mitigated** — open registration now **auto-disables once the first (owner)
+  account exists**; still start public instances with
+  `CAIRN_OPEN_REGISTRATION=false`. The public read-only share-link feature was
+  removed entirely.
 
 ## Hardening a public-facing instance
 
