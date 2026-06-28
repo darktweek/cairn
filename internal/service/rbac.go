@@ -18,6 +18,9 @@ type RBACService interface {
 	UpdateRole(ctx context.Context, actor *model.User, id, name string, perms []string) error
 	DeleteRole(ctx context.Context, id string) error
 	AssignRole(ctx context.Context, actor *model.User, userID, roleID string) error
+	SetUserRoles(ctx context.Context, actor *model.User, userID string, roleIDs []string) error
+	RolesForUser(ctx context.Context, userID string) ([]model.Role, error)
+	RolesForUsers(ctx context.Context, userIDs []string) (map[string][]model.Role, error)
 }
 
 type rbacService struct {
@@ -109,22 +112,52 @@ func (s *rbacService) DeleteRole(ctx context.Context, id string) error {
 	return s.repos.Roles.Delete(ctx, id)
 }
 
+// AssignRole sets a single role (convenience over SetUserRoles).
 func (s *rbacService) AssignRole(ctx context.Context, actor *model.User, userID, roleID string) error {
-	role, err := s.repos.Roles.GetByID(ctx, roleID)
-	if err != nil {
-		return ErrNotFound
-	}
-	// The actor may only assign a role whose permissions they could grant.
-	if err := guardGrantable(actor, role.Permissions); err != nil {
-		return err
-	}
+	return s.SetUserRoles(ctx, actor, userID, []string{roleID})
+}
 
+// SetUserRoles replaces a user's full set of roles.
+func (s *rbacService) SetUserRoles(ctx context.Context, actor *model.User, userID string, roleIDs []string) error {
 	target, err := s.repos.Users.GetByID(ctx, userID)
 	if err != nil {
 		return ErrNotFound
 	}
+
+	// Load the requested roles, dedupe, and gather their permission union.
+	seen := map[string]bool{}
+	var roles []*model.Role
+	var union []string
+	hasOwner := false
+	for _, rid := range roleIDs {
+		if rid == "" || seen[rid] {
+			continue
+		}
+		seen[rid] = true
+		role, err := s.repos.Roles.GetByID(ctx, rid)
+		if err != nil {
+			return fmt.Errorf("%w: unknown role", ErrInvalidInput)
+		}
+		roles = append(roles, role)
+		union = append(union, role.Permissions...)
+		if role.ID == model.RoleIDOwner {
+			hasOwner = true
+		}
+	}
+
+	// Anti-escalation: the actor may only grant permissions they hold.
+	if err := guardGrantable(actor, union); err != nil {
+		return err
+	}
+
 	// Never strip the instance of its last owner.
-	if target.RoleID == model.RoleIDOwner && roleID != model.RoleIDOwner {
+	targetWasOwner := false
+	for _, rl := range mustRoles(ctx, s, userID) {
+		if rl.ID == model.RoleIDOwner {
+			targetWasOwner = true
+		}
+	}
+	if targetWasOwner && !hasOwner {
 		owners, err := s.repos.Roles.CountUsersWithRole(ctx, model.RoleIDOwner)
 		if err != nil {
 			return err
@@ -134,25 +167,75 @@ func (s *rbacService) AssignRole(ctx context.Context, actor *model.User, userID,
 		}
 	}
 
-	if err := s.repos.Roles.AssignUserRole(ctx, userID, roleID, legacyRoleFor(role)); err != nil {
+	ids := make([]string, 0, len(roles))
+	for _, rl := range roles {
+		ids = append(ids, rl.ID)
+	}
+	if err := s.repos.Roles.SetUserRoles(ctx, userID, ids, primaryRoleID(roles), legacyRoleForSet(roles)); err != nil {
 		return err
 	}
 	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
 		ID:        ulid.Make().String(),
 		UserID:    &actor.ID,
 		Action:    "role_assigned",
-		Metadata:  map[string]any{"target": userID, "role": role.Name},
+		Metadata:  map[string]any{"target": userID, "roles": ids},
 		CreatedAt: time.Now(),
 	})
+	_ = target
 	return nil
 }
 
-// legacyRoleFor maps a role to the coarse user/admin value kept in users.role
-// (so the old CHECK constraint and admin-count guard keep working).
-func legacyRoleFor(role *model.Role) string {
-	for _, p := range role.Permissions {
-		if p == model.PermUsersManage || p == model.PermRolesManage || p == model.PermSettingsManage {
-			return "admin"
+func mustRoles(ctx context.Context, s *rbacService, userID string) []model.Role {
+	roles, _ := s.repos.Roles.RolesForUser(ctx, userID)
+	return roles
+}
+
+func (s *rbacService) RolesForUser(ctx context.Context, userID string) ([]model.Role, error) {
+	return s.repos.Roles.RolesForUser(ctx, userID)
+}
+
+func (s *rbacService) RolesForUsers(ctx context.Context, userIDs []string) (map[string][]model.Role, error) {
+	return s.repos.Roles.RolesForUsers(ctx, userIDs)
+}
+
+// primaryRoleID picks the representative role for single-role display:
+// owner > admin > first custom > user.
+func primaryRoleID(roles []*model.Role) string {
+	if len(roles) == 0 {
+		return ""
+	}
+	var admin, custom, user string
+	for _, r := range roles {
+		switch r.ID {
+		case model.RoleIDOwner:
+			return model.RoleIDOwner
+		case model.RoleIDAdmin:
+			admin = r.ID
+		case model.RoleIDUser:
+			user = r.ID
+		default:
+			if custom == "" {
+				custom = r.ID
+			}
+		}
+	}
+	if admin != "" {
+		return admin
+	}
+	if custom != "" {
+		return custom
+	}
+	return user
+}
+
+// legacyRoleForSet returns "admin" if any role grants an admin-area permission,
+// keeping users.role (CHECK + admin-count guard) consistent.
+func legacyRoleForSet(roles []*model.Role) string {
+	for _, role := range roles {
+		for _, p := range role.Permissions {
+			if p == model.PermUsersManage || p == model.PermRolesManage || p == model.PermSettingsManage {
+				return "admin"
+			}
 		}
 	}
 	return "user"

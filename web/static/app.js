@@ -2070,8 +2070,11 @@ function buildAdminUsers() {
       const nameEl = el('div', 'flex-1');
       const name   = el('span', 'user-name', u.username);
       const email  = el('span', 'user-email', ' · ' + u.email);
-      const roleLabel = u.role_name || u.role;
-      if (roleLabel && roleLabel !== 'user') name.innerHTML += `<span class="badge badge-admin">${roleLabel}</span>`;
+      // Show a badge per assigned role (excluding the plain "user" role).
+      const roleNames = (u.roles && u.roles.length) ? u.roles.map(r => r.name) : [u.role_name || u.role];
+      for (const rn of roleNames) {
+        if (rn && rn !== 'user') name.innerHTML += `<span class="badge badge-admin">${rn}</span>`;
+      }
       if (!u.is_active)       name.innerHTML += '<span class="badge badge-inactive">suspended</span>';
 
       // Stats line (bookmarks / wallpapers / sessions)
@@ -2143,23 +2146,24 @@ function buildAdminUsers() {
       };
       quotaWrap.append(quotaInput, quotaSaveBtn, quotaResetBtn);
 
-      // Role assignment selector (requires users.manage; hidden for self).
+      // Multi-role assignment via checkboxes (requires users.manage; hidden for self).
       if (u.id !== S.user.id && roles.length) {
-        const roleSel = el('select', 'form-input form-input-sm');
-        roleSel.title = t('roles.assign');
-        roleSel.style.width = '8rem';
+        const roleBox = el('div', 'user-roles');
+        roleBox.title = t('roles.assign');
+        const have = new Set((u.roles || []).map(r => r.id));
         for (const role of roles) {
-          const opt = document.createElement('option');
-          opt.value = role.id;
-          opt.textContent = role.name;
-          if (role.id === u.role_id) opt.selected = true;
-          roleSel.appendChild(opt);
+          const lbl = el('label', 'user-role-chip');
+          const cb = el('input'); cb.type = 'checkbox'; cb.value = role.id;
+          cb.checked = have.has(role.id);
+          cb.onchange = async () => {
+            const ids = [...roleBox.querySelectorAll('input:checked')].map(c => c.value);
+            try { await PUT(`/admin/users/${u.id}/roles`, { role_ids: ids }); renderAdminTab('users'); }
+            catch (e) { alert(e.message); renderAdminTab('users'); }
+          };
+          lbl.append(cb, el('span', null, ' ' + role.name));
+          roleBox.appendChild(lbl);
         }
-        roleSel.onchange = async () => {
-          try { await PUT(`/admin/users/${u.id}/role`, { role_id: roleSel.value }); renderAdminTab('users'); }
-          catch (e) { alert(e.message); renderAdminTab('users'); }
-        };
-        acts.appendChild(roleSel);
+        acts.appendChild(roleBox);
       }
 
       if (u.id !== S.user.id) {

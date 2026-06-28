@@ -861,9 +861,20 @@ body.searching #date-line {
 .role-perm { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text-dim); }
 .mt-1 { margin-top: 0.5rem; }
 
+/* Per-user multi-role checkboxes in the admin Users tab. */
+.user-roles {
+  display: flex; flex-wrap: wrap; gap: 0.15rem 0.6rem;
+  align-items: center; max-width: 22rem;
+}
+.user-role-chip {
+  display: flex; align-items: center; gap: 0.3rem;
+  font-size: 0.78rem; color: var(--text-dim);
+}
+
 /* Themed checkboxes for roles and policies (consistent in both states). */
 .role-perm input[type="checkbox"],
-.policy-row input[type="checkbox"] {
+.policy-row input[type="checkbox"],
+.user-role-chip input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
   width: 16px; height: 16px;
@@ -876,12 +887,14 @@ body.searching #date-line {
   position: relative;
 }
 .role-perm input[type="checkbox"]:checked,
-.policy-row input[type="checkbox"]:checked {
+.policy-row input[type="checkbox"]:checked,
+.user-role-chip input[type="checkbox"]:checked {
   background: var(--accent);
   border-color: var(--accent);
 }
 .role-perm input[type="checkbox"]:checked::after,
-.policy-row input[type="checkbox"]:checked::after {
+.policy-row input[type="checkbox"]:checked::after,
+.user-role-chip input[type="checkbox"]:checked::after {
   content: '';
   position: absolute;
   left: 5px; top: 2px;

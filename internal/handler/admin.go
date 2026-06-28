@@ -21,6 +21,7 @@ func userJSON(u *model.User) map[string]any {
 		"role":          u.Role,
 		"role_id":       u.RoleID,
 		"role_name":     u.RoleName,
+		"roles":         roleList(u.Roles),
 		"is_active":     u.IsActive,
 		"search_engine": u.SearchEngine,
 		"created_at":    u.CreatedAt.Unix(),
@@ -34,6 +35,15 @@ func userJSON(u *model.User) map[string]any {
 	}
 	if u.StorageQuota != nil {
 		out["storage_quota"] = *u.StorageQuota
+	}
+	return out
+}
+
+// roleList serializes a user's roles to compact {id, name} objects.
+func roleList(roles []model.Role) []map[string]string {
+	out := make([]map[string]string, 0, len(roles))
+	for _, r := range roles {
+		out = append(out, map[string]string{"id": r.ID, "name": r.Name})
 	}
 	return out
 }
@@ -63,8 +73,16 @@ func (h *Handler) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	// Batch-load each user's roles (multi-role) for the response.
+	ids := make([]string, 0, len(users))
+	for _, u := range users {
+		ids = append(ids, u.ID)
+	}
+	rolesByUser, _ := h.RBAC.RolesForUsers(r.Context(), ids)
+
 	out := make([]map[string]any, 0, len(users))
 	for _, u := range users {
+		u.Roles = rolesByUser[u.ID]
 		out = append(out, userJSON(u))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -80,6 +98,7 @@ func (h *Handler) AdminGetUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	user.Roles, _ = h.RBAC.RolesForUser(r.Context(), user.ID)
 	writeJSON(w, http.StatusOK, userJSON(user))
 }
 

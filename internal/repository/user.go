@@ -64,6 +64,14 @@ func (r *sqliteUserRepo) Create(ctx context.Context, u *model.User) error {
 	if err != nil {
 		return fmt.Errorf("user create: %w", err)
 	}
+	// Seed the user_roles junction so the multi-role layer stays consistent.
+	if u.RoleID != "" {
+		if _, err := r.db.ExecContext(ctx,
+			`INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)`, u.ID, u.RoleID,
+		); err != nil {
+			return fmt.Errorf("user create role link: %w", err)
+		}
+	}
 	return nil
 }
 

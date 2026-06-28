@@ -8,9 +8,10 @@ type User struct {
 	Email           string
 	Password        string `json:"-"` // argon2id hash, never exposed in JSON
 	Role            string // legacy coarse role column: "user" | "admin"
-	RoleID          string // FK to roles.id (the real, possibly custom role)
-	RoleName        string // role display name, resolved from roles (owner/admin/custom)
-	Permissions     []string // instance permissions, loaded on authentication
+	RoleID          string // primary role id (denormalised, for single-role display)
+	RoleName        string // primary role display name
+	Roles           []Role // all roles held by the user (multi-role); loaded when needed
+	Permissions     []string // union of permissions across all roles, loaded on auth
 	IsActive        bool
 	WallpaperLimit   *int   // nil = use global config default
 	UploadSizeLimit  *int64 // max bytes for a single file upload; nil = use global CAIRN_MAX_UPLOAD_SIZE

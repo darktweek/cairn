@@ -68,17 +68,18 @@ func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handler) AssignUserRole(w http.ResponseWriter, r *http.Request) {
+// SetUserRoles replaces a user's full role set.
+func (h *Handler) SetUserRoles(w http.ResponseWriter, r *http.Request) {
 	actor := middleware.UserFromCtx(r.Context())
 	userID := chi.URLParam(r, "id")
 	var body struct {
-		RoleID string `json:"role_id"`
+		RoleIDs []string `json:"role_ids"`
 	}
 	if err := decode(r, &body); err != nil {
 		writeError(w, fmt.Errorf("%w: invalid JSON", service.ErrInvalidInput))
 		return
 	}
-	if err := h.RBAC.AssignRole(r.Context(), actor, userID, body.RoleID); err != nil {
+	if err := h.RBAC.SetUserRoles(r.Context(), actor, userID, body.RoleIDs); err != nil {
 		writeError(w, err)
 		return
 	}

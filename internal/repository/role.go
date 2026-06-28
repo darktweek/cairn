@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/darktweek/cairn/internal/model"
@@ -18,11 +19,20 @@ type RoleRepository interface {
 	Update(ctx context.Context, role *model.Role) error
 	Delete(ctx context.Context, id string) error
 	SetPermissions(ctx context.Context, roleID string, perms []string) error
-	// PermissionsForUser returns the permission set granted to a user via their role.
+	// PermissionsForUser returns the union of permissions across all the user's roles.
 	PermissionsForUser(ctx context.Context, userID string) ([]string, error)
-	// AssignUserRole sets a user's role_id and keeps the legacy role column in sync.
+	// RolesForUser returns every role held by the user.
+	RolesForUser(ctx context.Context, userID string) ([]model.Role, error)
+	// RolesForUsers batch-loads roles for several users (admin list).
+	RolesForUsers(ctx context.Context, userIDs []string) (map[string][]model.Role, error)
+	// SetUserRoles replaces the user's full role set; primaryRoleID/legacyRole keep
+	// users.role_id and users.role (the coarse fallback) in sync.
+	SetUserRoles(ctx context.Context, userID string, roleIDs []string, primaryRoleID, legacyRole string) error
+	// AssignUserRole sets a user's single role (convenience wrapper over SetUserRoles).
 	AssignUserRole(ctx context.Context, userID, roleID, legacyRole string) error
-	// CountUsersWithRole counts active users currently assigned to a role.
+	// AddUserRole adds one role to a user (and seeds users.role_id if empty).
+	AddUserRole(ctx context.Context, userID, roleID, legacyRole string) error
+	// CountUsersWithRole counts active users currently holding a role.
 	CountUsersWithRole(ctx context.Context, roleID string) (int, error)
 }
 
@@ -165,10 +175,10 @@ func (r *sqliteRoleRepo) SetPermissions(ctx context.Context, roleID string, perm
 
 func (r *sqliteRoleRepo) PermissionsForUser(ctx context.Context, userID string) ([]string, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT rp.permission
-		FROM users u
-		JOIN role_permissions rp ON rp.role_id = u.role_id
-		WHERE u.id = ?`, userID)
+		SELECT DISTINCT rp.permission
+		FROM user_roles ur
+		JOIN role_permissions rp ON rp.role_id = ur.role_id
+		WHERE ur.user_id = ?`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("perms for user: %w", err)
 	}
@@ -184,20 +194,120 @@ func (r *sqliteRoleRepo) PermissionsForUser(ctx context.Context, userID string) 
 	return perms, rows.Err()
 }
 
-func (r *sqliteRoleRepo) AssignUserRole(ctx context.Context, userID, roleID, legacyRole string) error {
-	_, err := r.db.ExecContext(ctx,
-		`UPDATE users SET role_id = ?, role = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
-		roleID, legacyRole, time.Now().Unix(), userID)
+func (r *sqliteRoleRepo) RolesForUser(ctx context.Context, userID string) ([]model.Role, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT rl.id, rl.name, rl.is_system, rl.created_at, rl.updated_at
+		FROM user_roles ur JOIN roles rl ON rl.id = ur.role_id
+		WHERE ur.user_id = ?
+		ORDER BY rl.is_system DESC, rl.name COLLATE NOCASE ASC`, userID)
 	if err != nil {
-		return fmt.Errorf("assign user role: %w", err)
+		return nil, fmt.Errorf("roles for user: %w", err)
 	}
-	return nil
+	defer rows.Close()
+	var out []model.Role
+	for rows.Next() {
+		role, err := scanRole(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *role)
+	}
+	return out, rows.Err()
+}
+
+func (r *sqliteRoleRepo) RolesForUsers(ctx context.Context, userIDs []string) (map[string][]model.Role, error) {
+	out := map[string][]model.Role{}
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+	placeholders := strings.Repeat("?,", len(userIDs)-1) + "?"
+	args := make([]any, len(userIDs))
+	for i, id := range userIDs {
+		args[i] = id
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT ur.user_id, rl.id, rl.name, rl.is_system, rl.created_at, rl.updated_at
+		FROM user_roles ur JOIN roles rl ON rl.id = ur.role_id
+		WHERE ur.user_id IN (`+placeholders+`)
+		ORDER BY rl.is_system DESC, rl.name COLLATE NOCASE ASC`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("roles for users: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var uid string
+		var role model.Role
+		var isSystem int
+		var createdAt, updatedAt int64
+		if err := rows.Scan(&uid, &role.ID, &role.Name, &isSystem, &createdAt, &updatedAt); err != nil {
+			return nil, err
+		}
+		role.IsSystem = isSystem != 0
+		role.CreatedAt = time.Unix(createdAt, 0)
+		role.UpdatedAt = time.Unix(updatedAt, 0)
+		out[uid] = append(out[uid], role)
+	}
+	return out, rows.Err()
+}
+
+func (r *sqliteRoleRepo) SetUserRoles(ctx context.Context, userID string, roleIDs []string, primaryRoleID, legacyRole string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_roles WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("clear user roles: %w", err)
+	}
+	for _, rid := range roleIDs {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)`, userID, rid,
+		); err != nil {
+			return fmt.Errorf("add user role: %w", err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET role_id = ?, role = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
+		nullStr(primaryRoleID), legacyRole, time.Now().Unix(), userID,
+	); err != nil {
+		return fmt.Errorf("update primary role: %w", err)
+	}
+	return tx.Commit()
+}
+
+func (r *sqliteRoleRepo) AssignUserRole(ctx context.Context, userID, roleID, legacyRole string) error {
+	return r.SetUserRoles(ctx, userID, []string{roleID}, roleID, legacyRole)
+}
+
+func (r *sqliteRoleRepo) AddUserRole(ctx context.Context, userID, roleID, legacyRole string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
+		`INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)`, userID, roleID,
+	); err != nil {
+		return fmt.Errorf("add user role: %w", err)
+	}
+	// Seed the primary role if none set yet.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET role_id = COALESCE(NULLIF(role_id, ''), ?), role = ?, updated_at = ?
+		 WHERE id = ? AND deleted_at IS NULL`,
+		roleID, legacyRole, time.Now().Unix(), userID,
+	); err != nil {
+		return fmt.Errorf("seed primary role: %w", err)
+	}
+	return tx.Commit()
 }
 
 func (r *sqliteRoleRepo) CountUsersWithRole(ctx context.Context, roleID string) (int, error) {
 	var n int
-	err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM users WHERE role_id = ? AND deleted_at IS NULL`, roleID).Scan(&n)
+	err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(DISTINCT ur.user_id) FROM user_roles ur
+		JOIN users u ON u.id = ur.user_id
+		WHERE ur.role_id = ? AND u.deleted_at IS NULL`, roleID).Scan(&n)
 	return n, err
 }
 

@@ -243,6 +243,9 @@ func (s *authService) ValidateSession(ctx context.Context, token string) (*model
 	if perms, err := s.repos.Roles.PermissionsForUser(ctx, user.ID); err == nil {
 		user.Permissions = perms
 	}
+	if roles, err := s.repos.Roles.RolesForUser(ctx, user.ID); err == nil {
+		user.Roles = roles
+	}
 	if user.RoleName == "" {
 		user.RoleName = "user"
 	}
