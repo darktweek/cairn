@@ -11,3 +11,11 @@ cairn-spec.md
 
 # Overrides personnels Docker Compose (domaine, SMTP, Traefik…)
 compose.override.yaml
+
+# OS / editor / agent artifacts
+.DS_Store
+**/.DS_Store
+.claude/
+.vscode/
+.idea/
+*.log
