@@ -2071,11 +2071,13 @@ function buildAdminUsers() {
       const name   = el('span', 'user-name', u.username);
       const email  = el('span', 'user-email', ' · ' + u.email);
       // Show a badge per assigned role (excluding the plain "user" role).
+      // Build with el()/textContent — never innerHTML — so role names (user input)
+      // cannot inject markup.
       const roleNames = (u.roles && u.roles.length) ? u.roles.map(r => r.name) : [u.role_name || u.role];
       for (const rn of roleNames) {
-        if (rn && rn !== 'user') name.innerHTML += `<span class="badge badge-admin">${rn}</span>`;
+        if (rn && rn !== 'user') name.appendChild(el('span', 'badge badge-admin', rn));
       }
-      if (!u.is_active)       name.innerHTML += '<span class="badge badge-inactive">suspended</span>';
+      if (!u.is_active) name.appendChild(el('span', 'badge badge-inactive', 'suspended'));
 
       // Stats line (bookmarks / wallpapers / sessions)
       const statLine = el('div', 'user-stats', '…');

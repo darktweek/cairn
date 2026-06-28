@@ -124,6 +124,19 @@ func (s *rbacService) SetUserRoles(ctx context.Context, actor *model.User, userI
 		return ErrNotFound
 	}
 
+	// Privilege guard: an actor may not modify a user who holds a permission the
+	// actor lacks (you cannot tamper with someone more privileged than yourself).
+	// This stops a plain users.manage admin from stripping an owner/admin's roles.
+	targetPerms, err := s.repos.Roles.PermissionsForUser(ctx, userID)
+	if err != nil {
+		return err
+	}
+	for _, p := range targetPerms {
+		if !actor.Can(p) {
+			return fmt.Errorf("%w: cannot modify a more privileged user", ErrForbidden)
+		}
+	}
+
 	// Load the requested roles, dedupe, and gather their permission union.
 	seen := map[string]bool{}
 	var roles []*model.Role

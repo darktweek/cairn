@@ -92,4 +92,10 @@ func TestSetUserRolesAntiEscalationAndLastOwner(t *testing.T) {
 	if err := rbac.SetUserRoles(ctx, ownerActor, owner.ID, []string{model.RoleIDUser}); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("demoting last owner: got %v, want ErrForbidden", err)
 	}
+
+	// Privilege guard: an admin cannot modify a more-privileged user (the owner),
+	// even to "demote" them (owner holds roles.manage which the admin lacks).
+	if err := rbac.SetUserRoles(ctx, adminActor, owner.ID, []string{model.RoleIDUser}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("admin modifying owner: got %v, want ErrForbidden", err)
+	}
 }
