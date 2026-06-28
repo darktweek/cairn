@@ -13,8 +13,6 @@ import (
 type CollectionRepository interface {
 	Create(ctx context.Context, c *model.Collection) error
 	GetByID(ctx context.Context, id string) (*model.Collection, error)
-	GetByPublicToken(ctx context.Context, token string) (*model.Collection, error)
-	SetPublicToken(ctx context.Context, id string, token *string) error
 	Update(ctx context.Context, c *model.Collection) error
 	Delete(ctx context.Context, id string) error
 	// ListAccessible returns every collection the user can access, each with its
@@ -63,23 +61,9 @@ func (r *sqliteCollectionRepo) Create(ctx context.Context, c *model.Collection) 
 
 func (r *sqliteCollectionRepo) GetByID(ctx context.Context, id string) (*model.Collection, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, owner_id, name, description, color, icon, is_personal, created_at, updated_at, public_token
+		SELECT id, owner_id, name, description, color, icon, is_personal, created_at, updated_at
 		FROM collections WHERE id = ?`, id)
 	return scanCollection(row)
-}
-
-func (r *sqliteCollectionRepo) GetByPublicToken(ctx context.Context, token string) (*model.Collection, error) {
-	row := r.db.QueryRowContext(ctx, `
-		SELECT id, owner_id, name, description, color, icon, is_personal, created_at, updated_at, public_token
-		FROM collections WHERE public_token = ?`, token)
-	return scanCollection(row)
-}
-
-func (r *sqliteCollectionRepo) SetPublicToken(ctx context.Context, id string, token *string) error {
-	_, err := r.db.ExecContext(ctx,
-		`UPDATE collections SET public_token = ?, updated_at = ? WHERE id = ?`,
-		token, time.Now().Unix(), id)
-	return err
 }
 
 func (r *sqliteCollectionRepo) Update(ctx context.Context, c *model.Collection) error {
@@ -111,8 +95,7 @@ func (r *sqliteCollectionRepo) ListAccessible(ctx context.Context, userID string
 	var args []any
 	sharedExpr := `(c.owner_id <> ?
 	     OR EXISTS(SELECT 1 FROM collection_shares s2 WHERE s2.collection_id = c.id)
-	     OR EXISTS(SELECT 1 FROM collection_group_shares g2 WHERE g2.collection_id = c.id)
-	     OR c.public_token IS NOT NULL)`
+	     OR EXISTS(SELECT 1 FROM collection_group_shares g2 WHERE g2.collection_id = c.id))`
 
 	if override {
 		query = `
@@ -120,8 +103,7 @@ func (r *sqliteCollectionRepo) ListAccessible(ctx context.Context, userID string
 		       c.created_at, c.updated_at, u.username,
 		       (SELECT COUNT(*) FROM bookmarks b WHERE b.collection_id = c.id) AS cnt,
 		       'manage' AS perm,
-		       ` + sharedExpr + ` AS shared,
-		       (c.public_token IS NOT NULL) AS is_public
+		       ` + sharedExpr + ` AS shared
 		FROM collections c JOIN users u ON u.id = c.owner_id
 		ORDER BY c.is_personal DESC, c.name COLLATE NOCASE ASC`
 		args = []any{userID}
@@ -132,8 +114,7 @@ func (r *sqliteCollectionRepo) ListAccessible(ctx context.Context, userID string
 		       (SELECT COUNT(*) FROM bookmarks b WHERE b.collection_id = c.id) AS cnt,
 		       CASE WHEN c.owner_id = ? THEN 'manage'
 		            ELSE COALESCE(cs.perm, gshare.perm) END AS perm,
-		       ` + sharedExpr + ` AS shared,
-		       (c.public_token IS NOT NULL) AS is_public
+		       ` + sharedExpr + ` AS shared
 		FROM collections c
 		JOIN users u ON u.id = c.owner_id
 		LEFT JOIN collection_shares cs ON cs.collection_id = c.id AND cs.user_id = ?
@@ -172,7 +153,7 @@ func (r *sqliteCollectionRepo) ListAccessible(ctx context.Context, userID string
 
 func (r *sqliteCollectionRepo) GetOrCreatePersonal(ctx context.Context, userID string) (*model.Collection, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, owner_id, name, description, color, icon, is_personal, created_at, updated_at, public_token
+		SELECT id, owner_id, name, description, color, icon, is_personal, created_at, updated_at
 		FROM collections WHERE owner_id = ? AND is_personal = 1 LIMIT 1`, userID)
 	c, err := scanCollection(row)
 	if err == nil {
@@ -380,11 +361,11 @@ func (r *sqliteCollectionRepo) RemoveGroupShare(ctx context.Context, collectionI
 
 func scanCollection(s scanner) (*model.Collection, error) {
 	var c model.Collection
-	var desc, color, icon, publicToken sql.NullString
+	var desc, color, icon sql.NullString
 	var isPersonal int
 	var createdAt, updatedAt int64
 
-	err := s.Scan(&c.ID, &c.OwnerID, &c.Name, &desc, &color, &icon, &isPersonal, &createdAt, &updatedAt, &publicToken)
+	err := s.Scan(&c.ID, &c.OwnerID, &c.Name, &desc, &color, &icon, &isPersonal, &createdAt, &updatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -395,7 +376,6 @@ func scanCollection(s scanner) (*model.Collection, error) {
 	c.Color = color.String
 	c.Icon = icon.String
 	c.IsPersonal = isPersonal != 0
-	c.PublicToken = publicToken.String
 	c.CreatedAt = time.Unix(createdAt, 0)
 	c.UpdatedAt = time.Unix(updatedAt, 0)
 	return &c, nil
@@ -404,11 +384,11 @@ func scanCollection(s scanner) (*model.Collection, error) {
 func scanCollectionListWithPerm(s scanner) (*model.Collection, error) {
 	var c model.Collection
 	var desc, color, icon, perm sql.NullString
-	var isPersonal, shared, isPublic int
+	var isPersonal, shared int
 	var createdAt, updatedAt int64
 
 	err := s.Scan(&c.ID, &c.OwnerID, &c.Name, &desc, &color, &icon, &isPersonal,
-		&createdAt, &updatedAt, &c.OwnerUsername, &c.BookmarkCount, &perm, &shared, &isPublic)
+		&createdAt, &updatedAt, &c.OwnerUsername, &c.BookmarkCount, &perm, &shared)
 	if err != nil {
 		return nil, fmt.Errorf("scan collection list: %w", err)
 	}
@@ -418,7 +398,6 @@ func scanCollectionListWithPerm(s scanner) (*model.Collection, error) {
 	c.IsPersonal = isPersonal != 0
 	c.Perm = perm.String
 	c.Shared = shared != 0
-	c.IsPublic = isPublic != 0
 	c.CreatedAt = time.Unix(createdAt, 0)
 	c.UpdatedAt = time.Unix(updatedAt, 0)
 	return &c, nil

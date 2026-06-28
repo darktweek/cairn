@@ -179,9 +179,6 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 	// Public: open registration flag (used by login page to show/hide register link).
 	r.Get("/api/auth/config", h.PublicAuthConfig)
 
-	// Public: read-only collection share links.
-	r.Get("/api/public/collections/{token}", h.PublicCollectionView)
-
 	// Public: SSO / OIDC.
 	r.Get("/api/auth/sso/config", h.SSOConfig)
 	r.Get("/api/auth/sso/login", h.SSOLogin)
@@ -257,7 +254,6 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 		r.Delete("/api/collections/{id}/shares/{userId}", h.RemoveCollectionShare)
 		r.Post("/api/collections/{id}/group-shares", h.SetCollectionGroupShare)
 		r.Delete("/api/collections/{id}/group-shares/{groupId}", h.RemoveCollectionGroupShare)
-		r.Post("/api/collections/{id}/public-link", h.SetCollectionPublicLink)
 		r.Put("/api/folders/{id}", h.UpdateFolder)
 		r.Delete("/api/folders/{id}", h.DeleteFolder)
 		r.Get("/api/users/search", h.SearchUsers)
@@ -362,10 +358,6 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 	})
 	r.Get("/app.js", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, static, "app.js")
-	})
-	// Public read-only collection viewer (anonymous share links).
-	r.Get("/s/{token}", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, static, "public.html")
 	})
 	r.Get("/i18n.js", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, static, "i18n.js")

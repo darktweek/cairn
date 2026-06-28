@@ -160,35 +160,6 @@ func (h *Handler) SearchUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"users": out})
 }
 
-func (h *Handler) SetCollectionPublicLink(w http.ResponseWriter, r *http.Request) {
-	user := middleware.UserFromCtx(r.Context())
-	id := chi.URLParam(r, "id")
-	var body struct {
-		Enable bool `json:"enable"`
-	}
-	if err := decode(r, &body); err != nil {
-		writeError(w, fmt.Errorf("%w: invalid JSON", service.ErrInvalidInput))
-		return
-	}
-	token, err := h.Collection.SetPublicLink(r.Context(), user.ID, id, body.Enable)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"token": token})
-}
-
-// PublicCollectionView is unauthenticated — it serves a read-only collection by token.
-func (h *Handler) PublicCollectionView(w http.ResponseWriter, r *http.Request) {
-	token := chi.URLParam(r, "token")
-	view, err := h.Collection.PublicView(r.Context(), token)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, view)
-}
-
 func (h *Handler) GetPolicies(w http.ResponseWriter, r *http.Request) {
 	pol, err := h.Collection.Policies(r.Context())
 	if err != nil {

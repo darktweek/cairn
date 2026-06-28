@@ -958,11 +958,8 @@ function populateCollectionFilter() {
     const opt = document.createElement('option');
     opt.value = c.id;
     let label = c.is_personal ? t('col.personal') : c.name;
-    // Indicators: 👥 shared (with/by me), 🔗 has a public link.
-    let icon = '';
-    if (c.is_public) icon += '🔗 ';
-    if (c.shared && !c.is_personal) icon += '👥 ';
-    label = icon + label;
+    // Indicator: 👥 = shared (with me, or owned by me and shared with someone).
+    if (c.shared && !c.is_personal) label = '👥 ' + label;
     opt.textContent = c.bookmark_count != null ? `${label} (${c.bookmark_count})` : label;
     if (c.id === S.currentColId) opt.selected = true;
     sel.appendChild(opt);
@@ -1345,7 +1342,7 @@ async function deleteFolder(id) {
 /* ─── Collection sharing ─────────────────────────────────────────────────── */
 const PERMS = ['view', 'edit', 'manage'];
 
-async function openShareDialog() {
+function openShareDialog() {
   const col = currentCollection();
   if (!col || col.is_personal || col.perm !== 'manage') return;
   setError('modal-share-error', '');
@@ -1353,41 +1350,6 @@ async function openShareDialog() {
   $('share-results').innerHTML = '';
   show('modal-share');
   renderShareList();
-
-  // Public link state comes from the collection detail (carries public_token).
-  const urlBox = $('share-public-url');
-  const toggle = $('share-public-toggle');
-  urlBox.hidden = true; toggle.checked = false;
-  try {
-    const detail = await GET(`/collections/${col.id}`);
-    setPublicUrl(detail.public_token);
-  } catch (_) {}
-}
-
-function setPublicUrl(token) {
-  const urlBox = $('share-public-url');
-  const toggle = $('share-public-toggle');
-  if (token) {
-    toggle.checked = true;
-    urlBox.value = `${location.origin}/s/${token}`;
-    urlBox.hidden = false;
-  } else {
-    toggle.checked = false;
-    urlBox.value = '';
-    urlBox.hidden = true;
-  }
-}
-
-async function onPublicToggle() {
-  const col = currentCollection();
-  if (!col) return;
-  try {
-    const r = await POST(`/collections/${col.id}/public-link`, { enable: $('share-public-toggle').checked });
-    setPublicUrl(r.token);
-  } catch (e) {
-    setError('modal-share-error', e.message);
-    setPublicUrl(null);
-  }
 }
 
 function permSelect(current, onChange) {
@@ -3273,8 +3235,6 @@ document.addEventListener('DOMContentLoaded', () => {
   $('modal-bm-collection').addEventListener('change', onModalCollectionChange);
   $('modal-share-close').addEventListener('click', () => hide('modal-share'));
   $('share-search').addEventListener('input', onShareSearch);
-  $('share-public-toggle').addEventListener('change', onPublicToggle);
-  $('share-public-url').addEventListener('focus', e => e.target.select());
 
   // Bookmark modal
   $('modal-bm-save').addEventListener('click', saveBookmark);

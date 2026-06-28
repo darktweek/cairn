@@ -46,16 +46,6 @@ type CollectionService interface {
 
 	Policies(ctx context.Context) (map[string]bool, error)
 	SetPolicy(ctx context.Context, actorID, key string, value bool) error
-
-	SetPublicLink(ctx context.Context, userID, collectionID string, enable bool) (string, error)
-	PublicView(ctx context.Context, token string) (*PublicCollection, error)
-}
-
-// PublicCollection is the read-only payload served for a public share link.
-type PublicCollection struct {
-	Name      string            `json:"name"`
-	Folders   []*model.Folder   `json:"folders"`
-	Bookmarks []*model.Bookmark `json:"bookmarks"`
 }
 
 // policyKeys is the set of instance policies exposed to admins.
@@ -107,46 +97,6 @@ func (s *collectionService) Get(ctx context.Context, userID, id string) (*model.
 	}
 	c.Perm = perm
 	return c, nil
-}
-
-func (s *collectionService) SetPublicLink(ctx context.Context, userID, collectionID string, enable bool) (string, error) {
-	if _, err := s.requirePerm(ctx, userID, collectionID, model.PermManage); err != nil {
-		return "", err
-	}
-	col, err := s.repos.Collections.GetByID(ctx, collectionID)
-	if err != nil {
-		return "", err
-	}
-	if col.IsPersonal {
-		return "", fmt.Errorf("%w: the personal collection cannot be made public", ErrForbidden)
-	}
-	if !enable {
-		return "", s.repos.Collections.SetPublicToken(ctx, collectionID, nil)
-	}
-	token := randToken()
-	if err := s.repos.Collections.SetPublicToken(ctx, collectionID, &token); err != nil {
-		return "", err
-	}
-	return token, nil
-}
-
-func (s *collectionService) PublicView(ctx context.Context, token string) (*PublicCollection, error) {
-	if strings.TrimSpace(token) == "" {
-		return nil, ErrNotFound
-	}
-	col, err := s.repos.Collections.GetByPublicToken(ctx, token)
-	if err != nil {
-		return nil, ErrNotFound
-	}
-	folders, err := s.repos.Folders.ListByCollection(ctx, col.ID)
-	if err != nil {
-		return nil, err
-	}
-	bookmarks, _, err := s.repos.Bookmarks.ListByCollection(ctx, col.ID, repository.BookmarkFilter{Limit: 100000})
-	if err != nil {
-		return nil, err
-	}
-	return &PublicCollection{Name: col.Name, Folders: folders, Bookmarks: bookmarks}, nil
 }
 
 // policyOn reports whether an instance policy is enabled.

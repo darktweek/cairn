@@ -850,8 +850,8 @@ body.searching #date-line {
   padding: 0.9rem 1.1rem;
   margin-bottom: 0.8rem;
 }
-.role-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
-.role-name { font-weight: 600; }
+.role-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap; color: var(--text); }
+.role-name { font-weight: 600; color: var(--text); }
 .role-perms {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -904,9 +904,10 @@ body.searching #date-line {
 .share-row, .share-result {
   display: flex; align-items: center; gap: 0.5rem;
   padding: 0.35rem 0; border-bottom: 1px solid var(--border);
+  color: var(--text);
 }
 .share-results { max-height: 160px; overflow-y: auto; }
-.policy-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0; font-size: 0.9rem; }
+.policy-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0; font-size: 0.9rem; color: var(--text); }
 .bm-author { font-size: 0.72rem; color: var(--text-dimmer); margin-left: 0.4rem; }
 
 .bm-folder-del {

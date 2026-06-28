@@ -52,7 +52,6 @@ type Collection struct {
 	Color       string    `json:"color"`
 	Icon        string    `json:"icon"`
 	IsPersonal  bool      `json:"is_personal"`
-	PublicToken string    `json:"public_token,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 
@@ -62,7 +61,6 @@ type Collection struct {
 	Perm          string `json:"perm,omitempty"`
 	BookmarkCount int    `json:"bookmark_count"`
 	// Shared is true when the collection is part of a sharing relationship
-	// (shared with me, or owned by me and shared/public). IsPublic = has a link.
-	Shared   bool `json:"shared"`
-	IsPublic bool `json:"is_public"`
+	// (shared with me, or owned by me and shared with someone).
+	Shared bool `json:"shared"`
 }
