@@ -61,4 +61,8 @@ type Collection struct {
 	OwnerUsername string `json:"owner_username,omitempty"`
 	Perm          string `json:"perm,omitempty"`
 	BookmarkCount int    `json:"bookmark_count"`
+	// Shared is true when the collection is part of a sharing relationship
+	// (shared with me, or owned by me and shared/public). IsPublic = has a link.
+	Shared   bool `json:"shared"`
+	IsPublic bool `json:"is_public"`
 }

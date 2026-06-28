@@ -109,21 +109,31 @@ func (r *sqliteCollectionRepo) ListAccessible(ctx context.Context, userID string
 
 	var query string
 	var args []any
+	sharedExpr := `(c.owner_id <> ?
+	     OR EXISTS(SELECT 1 FROM collection_shares s2 WHERE s2.collection_id = c.id)
+	     OR EXISTS(SELECT 1 FROM collection_group_shares g2 WHERE g2.collection_id = c.id)
+	     OR c.public_token IS NOT NULL)`
+
 	if override {
 		query = `
 		SELECT c.id, c.owner_id, c.name, c.description, c.color, c.icon, c.is_personal,
 		       c.created_at, c.updated_at, u.username,
 		       (SELECT COUNT(*) FROM bookmarks b WHERE b.collection_id = c.id) AS cnt,
-		       'manage' AS perm
+		       'manage' AS perm,
+		       ` + sharedExpr + ` AS shared,
+		       (c.public_token IS NOT NULL) AS is_public
 		FROM collections c JOIN users u ON u.id = c.owner_id
 		ORDER BY c.is_personal DESC, c.name COLLATE NOCASE ASC`
+		args = []any{userID}
 	} else {
 		query = `
 		SELECT c.id, c.owner_id, c.name, c.description, c.color, c.icon, c.is_personal,
 		       c.created_at, c.updated_at, u.username,
 		       (SELECT COUNT(*) FROM bookmarks b WHERE b.collection_id = c.id) AS cnt,
 		       CASE WHEN c.owner_id = ? THEN 'manage'
-		            ELSE COALESCE(cs.perm, gshare.perm) END AS perm
+		            ELSE COALESCE(cs.perm, gshare.perm) END AS perm,
+		       ` + sharedExpr + ` AS shared,
+		       (c.public_token IS NOT NULL) AS is_public
 		FROM collections c
 		JOIN users u ON u.id = c.owner_id
 		LEFT JOIN collection_shares cs ON cs.collection_id = c.id AND cs.user_id = ?
@@ -140,7 +150,7 @@ func (r *sqliteCollectionRepo) ListAccessible(ctx context.Context, userID string
 		) gshare ON gshare.cid = c.id
 		WHERE c.owner_id = ? OR cs.user_id IS NOT NULL OR gshare.cid IS NOT NULL
 		ORDER BY (c.owner_id = ?) DESC, c.is_personal DESC, c.name COLLATE NOCASE ASC`
-		args = []any{userID, userID, userID, userID, userID}
+		args = []any{userID, userID, userID, userID, userID, userID}
 	}
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
@@ -394,11 +404,11 @@ func scanCollection(s scanner) (*model.Collection, error) {
 func scanCollectionListWithPerm(s scanner) (*model.Collection, error) {
 	var c model.Collection
 	var desc, color, icon, perm sql.NullString
-	var isPersonal int
+	var isPersonal, shared, isPublic int
 	var createdAt, updatedAt int64
 
 	err := s.Scan(&c.ID, &c.OwnerID, &c.Name, &desc, &color, &icon, &isPersonal,
-		&createdAt, &updatedAt, &c.OwnerUsername, &c.BookmarkCount, &perm)
+		&createdAt, &updatedAt, &c.OwnerUsername, &c.BookmarkCount, &perm, &shared, &isPublic)
 	if err != nil {
 		return nil, fmt.Errorf("scan collection list: %w", err)
 	}
@@ -407,6 +417,8 @@ func scanCollectionListWithPerm(s scanner) (*model.Collection, error) {
 	c.Icon = icon.String
 	c.IsPersonal = isPersonal != 0
 	c.Perm = perm.String
+	c.Shared = shared != 0
+	c.IsPublic = isPublic != 0
 	c.CreatedAt = time.Unix(createdAt, 0)
 	c.UpdatedAt = time.Unix(updatedAt, 0)
 	return &c, nil

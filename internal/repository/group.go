@@ -12,6 +12,8 @@ import (
 
 type GroupRepository interface {
 	ListAll(ctx context.Context) ([]*model.Group, error)
+	// ListByMember returns the groups a user belongs to (for the share picker).
+	ListByMember(ctx context.Context, userID string) ([]*model.Group, error)
 	GetByID(ctx context.Context, id string) (*model.Group, error)
 	Create(ctx context.Context, g *model.Group) error
 	Update(ctx context.Context, g *model.Group) error
@@ -37,6 +39,28 @@ func (r *sqliteGroupRepo) ListAll(ctx context.Context) ([]*model.Group, error) {
 		FROM groups g ORDER BY g.name COLLATE NOCASE ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("group list: %w", err)
+	}
+	defer rows.Close()
+	var out []*model.Group
+	for rows.Next() {
+		g, err := scanGroup(rows, true)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+func (r *sqliteGroupRepo) ListByMember(ctx context.Context, userID string) ([]*model.Group, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT g.id, g.name, g.owner_id, g.created_at, g.updated_at,
+		       (SELECT COUNT(*) FROM group_members gm2 WHERE gm2.group_id = g.id) AS cnt
+		FROM groups g
+		JOIN group_members gm ON gm.group_id = g.id AND gm.user_id = ?
+		ORDER BY g.name COLLATE NOCASE ASC`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("group list by member: %w", err)
 	}
 	defer rows.Close()
 	var out []*model.Group

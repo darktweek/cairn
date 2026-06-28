@@ -10,7 +10,19 @@ import (
 	"github.com/darktweek/cairn/internal/service"
 )
 
+// ListGroups returns only the groups the current user belongs to (share picker).
 func (h *Handler) ListGroups(w http.ResponseWriter, r *http.Request) {
+	user := middleware.UserFromCtx(r.Context())
+	groups, err := h.Group.ListMine(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
+}
+
+// AdminListGroups returns every group (admin Groups tab, requires groups.manage).
+func (h *Handler) AdminListGroups(w http.ResponseWriter, r *http.Request) {
 	groups, err := h.Group.List(r.Context())
 	if err != nil {
 		writeError(w, err)

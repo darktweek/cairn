@@ -957,7 +957,12 @@ function populateCollectionFilter() {
   for (const c of S.collections) {
     const opt = document.createElement('option');
     opt.value = c.id;
-    const label = c.is_personal ? t('col.personal') : c.name;
+    let label = c.is_personal ? t('col.personal') : c.name;
+    // Indicators: 👥 shared (with/by me), 🔗 has a public link.
+    let icon = '';
+    if (c.is_public) icon += '🔗 ';
+    if (c.shared && !c.is_personal) icon += '👥 ';
+    label = icon + label;
     opt.textContent = c.bookmark_count != null ? `${label} (${c.bookmark_count})` : label;
     if (c.id === S.currentColId) opt.selected = true;
     sel.appendChild(opt);
@@ -2335,7 +2340,7 @@ function buildAdminGroups() {
   const list = el('div'); list.textContent = t('loading');
   frag.append(list);
 
-  GET('/groups').then(data => {
+  GET('/admin/groups').then(data => {
     const groups = data.groups || [];
     list.innerHTML = '';
     if (!groups.length) { list.appendChild(el('p', 'text-dimmer text-sm', t('groups.none'))); return; }

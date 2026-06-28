@@ -807,6 +807,7 @@ body.searching #date-line {
 /* ── Bookmark filter bar ────────────────────────────── */
 .bm-filter-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   padding: 0.6rem 1.1rem;
   border-bottom: 1px solid var(--border);

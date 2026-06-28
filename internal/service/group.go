@@ -15,6 +15,7 @@ import (
 // level by the groups.manage instance permission.
 type GroupService interface {
 	List(ctx context.Context) ([]*model.Group, error)
+	ListMine(ctx context.Context, userID string) ([]*model.Group, error)
 	Create(ctx context.Context, actorID, name string) (*model.Group, error)
 	Rename(ctx context.Context, id, name string) error
 	Delete(ctx context.Context, id string) error
@@ -33,6 +34,10 @@ func newGroupService(repos *repository.Repositories) GroupService {
 
 func (s *groupService) List(ctx context.Context) ([]*model.Group, error) {
 	return s.repos.Groups.ListAll(ctx)
+}
+
+func (s *groupService) ListMine(ctx context.Context, userID string) ([]*model.Group, error) {
+	return s.repos.Groups.ListByMember(ctx, userID)
 }
 
 func (s *groupService) Create(ctx context.Context, actorID, name string) (*model.Group, error) {

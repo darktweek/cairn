@@ -267,6 +267,7 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 		r.Get("/api/groups", h.ListGroups)
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequirePermission(model.PermGroupsManage))
+			r.Get("/api/admin/groups", h.AdminListGroups)
 			r.Post("/api/groups", h.CreateGroup)
 			r.Put("/api/groups/{id}", h.UpdateGroup)
 			r.Delete("/api/groups/{id}", h.DeleteGroup)
