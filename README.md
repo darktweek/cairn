@@ -404,4 +404,13 @@ A full pre-release review (auth, sessions, RBAC/ACL, injection, XSS, CSRF, SSRF,
 
 ## License
 
-MIT
+Cairn is **dual-licensed**:
+
+- **GNU AGPL-v3** for open-source / self-hosted use — see [`LICENSE`](LICENSE).
+  If you run a modified version as a network service, the AGPL (§13) requires
+  you to make your source modifications available to its users.
+- **Commercial license** — to embed Cairn in a proprietary product, or to offer
+  it as a hosted/SaaS service *without* the AGPL's source-disclosure
+  obligations. See [`LICENSING.md`](LICENSING.md).
+
+© 2026 darktweek. Contributions are accepted under [`CONTRIBUTING.md`](CONTRIBUTING.md).

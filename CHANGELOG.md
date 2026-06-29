@@ -15,6 +15,8 @@ All notable changes to Cairn are documented here. Format loosely follows
 ### Repo
 - Stopped tracking local artifacts (`.DS_Store`, `.claude/`) and extended
   `.gitignore` ahead of going public.
+- Licensed under **GNU AGPL-v3** with a **commercial** option (dual licensing);
+  added `LICENSE`, `LICENSING.md`, `CONTRIBUTING.md`.
 
 ## v0.2.0 — Collaboration & RBAC — 2026-06-28
 
