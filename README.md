@@ -7,6 +7,8 @@ Clock, ambient effects, wallpapers, configurable search, bookmarks, multi-user w
 
 This project is **100% vibecoded** — designed and built in conversation with AI (Claude Code), iterated feature by feature on a homelab. Craftsmanship for the joy of it, not for scale.
 
+💬 **Questions, ideas, help?** Join the Discord → **https://discord.gg/2S9v5MKfGg**
+
 ---
 
 ## What it looks like
@@ -399,6 +401,14 @@ A full pre-release review (auth, sessions, RBAC/ACL, injection, XSS, CSRF, SSRF,
 | QR code | skip2/go-qrcode (server-side PNG for TOTP setup) |
 | Docker image | `scratch` (~5 MB) |
 | Frontend | Vanilla JS, zero dependencies |
+
+---
+
+## Community
+
+- 💬 **Discord** — questions, ideas, support: https://discord.gg/2S9v5MKfGg
+- 🐛 **Issues** — bug reports & feature requests on GitHub
+- 🤝 **Contributing** — see [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ---
 
