@@ -3,6 +3,17 @@
 All notable changes to Cairn are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are date-stamped.
 
+## v0.2.2 — Invite without SMTP — 2026-06-29
+
+### Added
+- Creating or resending an invitation now returns the **invite link**, shown in
+  the admin Invitations tab with a **Copy link** button — so you can onboard
+  users even without SMTP configured (SMTP only *delivers* invites by email).
+
+### Docs
+- Corrected the "No SMTP" guidance (there is no direct user-creation endpoint;
+  use open registration or the copyable invite link).
+
 ## v0.2.1 — Security hardening — 2026-06-28
 
 ### Security
