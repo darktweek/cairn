@@ -86,8 +86,14 @@ CAIRN_SMTP_USER=you@example.com
 CAIRN_SMTP_PASS=your-smtp-password
 ```
 
-> **No SMTP?** You can skip SMTP for a first test — just know that invitation emails won't send.  
-> Set `CAIRN_SMTP_HOST` to a dummy value and create users manually via the admin panel.
+> **No SMTP?** You can run without it for a first test. Leave **open registration**
+> on (the default) and create your **owner** account from the login page's *Register*
+> link — no email needed. Open registration then auto-disables.
+>
+> ⚠️ **Inviting users requires SMTP**: the invite link is delivered by email and is
+> *not* shown in the admin UI, so without SMTP an invitation can't be completed.
+> To add more users without email, temporarily re-enable open registration in
+> **Admin → Settings → Registration**.
 
 ### Step 3 — Create your `compose.override.yaml`
 
