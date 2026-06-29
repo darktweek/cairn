@@ -27,8 +27,8 @@ If the AGPL's obligations don't fit your use case — for example you want to:
 then a separate **commercial license** is available from the copyright holder,
 which removes the AGPL copyleft/source-disclosure requirements.
 
-**To enquire:** open a GitHub issue labelled `licensing`, or contact the
-maintainer **@darktweek** <!-- add a contact email here if you prefer -->.
+**To enquire:** email **tweek@dotnot.be**, or open a GitHub issue labelled
+`licensing`.
 
 ## Contributions
 
