@@ -246,13 +246,14 @@ func (h *Handler) AdminCreateInvitation(w http.ResponseWriter, r *http.Request) 
 		writeError(w, fmt.Errorf("%w: invalid JSON", service.ErrInvalidInput))
 		return
 	}
-	inv, _, emailSent, err := h.Invitation.Create(r.Context(), admin.ID, body.Email)
+	inv, raw, emailSent, err := h.Invitation.Create(r.Context(), admin.ID, body.Email)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 	out := fmtInvitation(inv)
 	out["email_sent"] = emailSent
+	out["invite_url"] = h.Invitation.InviteURL(raw)
 	writeJSON(w, http.StatusCreated, out)
 }
 
@@ -285,11 +286,12 @@ func (h *Handler) AdminRevokeInvitation(w http.ResponseWriter, r *http.Request) 
 func (h *Handler) AdminResendInvitation(w http.ResponseWriter, r *http.Request) {
 	admin := middleware.UserFromCtx(r.Context())
 	id := chi.URLParam(r, "id")
-	_, emailSent, err := h.Invitation.Resend(r.Context(), id, admin.ID)
+	raw, emailSent, err := h.Invitation.Resend(r.Context(), id, admin.ID)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
+	inviteURL := h.Invitation.InviteURL(raw)
 	// Return updated invitation with email delivery status.
 	invs, err := h.Invitation.List(r.Context())
 	if err != nil {
@@ -300,11 +302,12 @@ func (h *Handler) AdminResendInvitation(w http.ResponseWriter, r *http.Request) 
 		if inv.ID == id {
 			out := fmtInvitation(inv)
 			out["email_sent"] = emailSent
+			out["invite_url"] = inviteURL
 			writeJSON(w, http.StatusOK, out)
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "email_sent": emailSent})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "email_sent": emailSent, "invite_url": inviteURL})
 }
 
 func fmtInvitation(inv *model.Invitation) map[string]any {

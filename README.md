@@ -45,7 +45,7 @@ Type `!menu` (or your configured bang) for the full-screen hub.
 | **Groups / teams** | Bundle users into groups and grant a whole team access to a collection |
 | **TOTP / 2FA** | RFC 6238, server-generated QR code, secrets encrypted at rest — enforced for invited / email-verified signups |
 | **Multi-user** | First account created becomes the instance **owner** automatically |
-| **Invitations** | Admin sends invite links by email with delivery confirmation; open registration toggle |
+| **Invitations** | Admin invites by email (with delivery confirmation) **or** by copying the invite link — works without SMTP; open registration toggle |
 | **SSO / OIDC** | OpenID Connect (Authentik, Keycloak, Authelia, Google…) — JIT account provisioning |
 | **Admin panel** | User management, storage quotas, upload limits, SMTP test, audit log, pending registrations |
 | **Email** | Account setup & invitation emails; SMTP supports implicit TLS (port 465) and STARTTLS (port 587); configurable via env or admin UI |
@@ -86,14 +86,12 @@ CAIRN_SMTP_USER=you@example.com
 CAIRN_SMTP_PASS=your-smtp-password
 ```
 
-> **No SMTP?** You can run without it for a first test. Leave **open registration**
-> on (the default) and create your **owner** account from the login page's *Register*
-> link — no email needed. Open registration then auto-disables.
->
-> ⚠️ **Inviting users requires SMTP**: the invite link is delivered by email and is
-> *not* shown in the admin UI, so without SMTP an invitation can't be completed.
-> To add more users without email, temporarily re-enable open registration in
-> **Admin → Settings → Registration**.
+> **No SMTP?** You can run entirely without it. Create your **owner** account from
+> the login page's *Register* link (open registration is on by default and
+> auto-disables afterwards). To add more users, go to **Admin → Invitations**,
+> create an invite, and **copy the invite link** shown right after — no email
+> needed. SMTP is only required to *deliver* invitations (and password resets) by
+> email automatically.
 
 ### Step 3 — Create your `compose.override.yaml`
 

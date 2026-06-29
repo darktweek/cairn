@@ -28,6 +28,8 @@ type InvitationService interface {
 	Revoke(ctx context.Context, adminID, id string) error
 	// Resend returns the new raw token, whether the email was sent, and any error.
 	Resend(ctx context.Context, id, adminID string) (string, bool, error)
+	// InviteURL builds the signup link for a raw invitation token.
+	InviteURL(token string) string
 }
 
 type invitationService struct {
@@ -38,6 +40,11 @@ type invitationService struct {
 
 func newInvitationService(repos *repository.Repositories, cfg *config.Config, email EmailService) InvitationService {
 	return &invitationService{repos: repos, cfg: cfg, email: email}
+}
+
+// InviteURL builds the signup link for a raw invitation token.
+func (s *invitationService) InviteURL(token string) string {
+	return fmt.Sprintf("%s/?invite=%s", s.cfg.BaseURL, token)
 }
 
 func (s *invitationService) IsOpenRegistration(ctx context.Context) (bool, error) {
@@ -78,7 +85,7 @@ func (s *invitationService) Create(ctx context.Context, adminID, email string) (
 		return nil, "", false, err
 	}
 
-	link := fmt.Sprintf("%s/?invite=%s", s.cfg.BaseURL, raw)
+	link := s.InviteURL(raw)
 	emailSent := false
 	if err := s.email.SendInvitation(ctx, email, link, inv.ExpiresAt); err != nil {
 		if !errors.Is(err, ErrSMTPNotConfigured) {
@@ -179,7 +186,7 @@ func (s *invitationService) Resend(ctx context.Context, id, adminID string) (str
 		return "", false, err
 	}
 
-	link := fmt.Sprintf("%s/?invite=%s", s.cfg.BaseURL, raw)
+	link := s.InviteURL(raw)
 	emailSent := false
 	if err := s.email.SendInvitation(ctx, inv.Email, link, inv.ExpiresAt); err != nil {
 		if !errors.Is(err, ErrSMTPNotConfigured) {

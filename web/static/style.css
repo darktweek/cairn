@@ -921,6 +921,13 @@ body.searching #date-line {
 }
 .share-results { max-height: 160px; overflow-y: auto; }
 .policy-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0; font-size: 0.9rem; color: var(--text); }
+.invite-link-box {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  padding: 0.6rem 0.8rem;
+  margin: 0.5rem 0;
+}
 .bm-author { font-size: 0.72rem; color: var(--text-dimmer); margin-left: 0.4rem; }
 
 .bm-folder-del {

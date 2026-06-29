@@ -2810,12 +2810,36 @@ function buildAdminInvitations() {
   const inviteErr = el('div', 'error-msg');
   form.append(emailInput, inviteBtn);
 
+  // Box that surfaces a freshly created/resent invite link with a Copy button.
+  // The link is only available at this moment (only its hash is stored), so it
+  // lets an admin invite users even without SMTP.
+  const inviteLinkBox = el('div', 'invite-link-box');
+  inviteLinkBox.hidden = true;
+  function showInviteLink(url) {
+    if (!url) { inviteLinkBox.hidden = true; return; }
+    inviteLinkBox.innerHTML = '';
+    inviteLinkBox.hidden = false;
+    inviteLinkBox.appendChild(el('div', 'text-sm text-dim', t('admin.inv.link.hint')));
+    const row = el('div', 'flex gap-1 items-center mt-1');
+    const field = el('input', 'form-input form-input-sm flex-1');
+    field.readOnly = true; field.value = url;
+    field.onfocus = () => field.select();
+    const copyBtn = el('button', 'btn btn-small btn-secondary', t('admin.inv.copy'));
+    copyBtn.onclick = async () => {
+      try { await navigator.clipboard.writeText(url); }
+      catch { field.select(); try { document.execCommand('copy'); } catch (_) {} }
+      copyBtn.textContent = t('admin.inv.copied');
+      setTimeout(() => { copyBtn.textContent = t('admin.inv.copy'); }, 1500);
+    };
+    row.append(field, copyBtn);
+    inviteLinkBox.appendChild(row);
+  }
+
   inviteBtn.onclick = async () => {
     inviteErr.className = 'error-msg'; inviteErr.textContent = '';
     try {
       const r = await POST('/admin/invitations', { email: emailInput.value.trim() });
       emailInput.value = '';
-      // Show email delivery feedback before refreshing the list.
       if (r.email_sent) {
         inviteErr.className = 'text-sm'; inviteErr.style.color = 'var(--success)';
         inviteErr.textContent = t('admin.inv.email_sent');
@@ -2823,69 +2847,63 @@ function buildAdminInvitations() {
         inviteErr.className = 'text-sm'; inviteErr.style.color = 'var(--warning, #f0a500)';
         inviteErr.textContent = t('admin.inv.email_not_sent');
       }
-      renderAdminTab('invitations');
+      showInviteLink(r.invite_url);
+      loadInvList();
     } catch (e) { inviteErr.className = 'error-msg'; inviteErr.textContent = e.message; }
   };
 
-  // Invitation list
+  // Invitation list — refreshed in place so the link box survives a refresh.
   const list = el('div');
-  list.textContent = t('loading');
+  function loadInvList() {
+    list.textContent = t('loading');
+    GET('/admin/invitations').then(invs => {
+      list.innerHTML = '';
+      if (!invs.length) { list.appendChild(el('p', 'text-sm text-dimmer', t('admin.inv.none'))); return; }
+      for (const inv of invs) {
+        const row = el('div', 'admin-user-row');
 
-  GET('/admin/invitations').then(invs => {
-    list.innerHTML = '';
-    if (!invs.length) { list.appendChild(el('p', 'text-sm text-dimmer', t('admin.inv.none'))); return; }
-    for (const inv of invs) {
-      const row = el('div', 'admin-user-row');
+        const info = el('div');
+        const email = el('span', 'user-name', inv.email);
+        let badge = '';
+        if (inv.used)         badge = `<span class="badge badge-inactive">${t('admin.inv.used')}</span>`;
+        else if (inv.expired) badge = `<span class="badge badge-inactive">${t('admin.inv.expired')}</span>`;
+        else                  badge = `<span class="badge badge-admin">${t('admin.inv.pending')}</span>`;
+        email.innerHTML += badge;
 
-      const info = el('div');
-      const email = el('span', 'user-name', inv.email);
-      let badge = '';
-      if (inv.used)         badge = `<span class="badge badge-inactive">${t('admin.inv.used')}</span>`;
-      else if (inv.expired) badge = `<span class="badge badge-inactive">${t('admin.inv.expired')}</span>`;
-      else                  badge = `<span class="badge badge-admin">${t('admin.inv.pending')}</span>`;
-      email.innerHTML += badge;
+        const exp = el('span', 'user-email',
+          ' · ' + t('admin.inv.expires') + ' ' + new Date(inv.expires_at * 1000).toLocaleString(_locale, { dateStyle: 'short', timeStyle: 'short' }));
+        info.append(email, exp);
 
-      const exp = el('span', 'user-email',
-        ' · ' + t('admin.inv.expires') + ' ' + new Date(inv.expires_at * 1000).toLocaleString(_locale, { dateStyle: 'short', timeStyle: 'short' }));
-      info.append(email, exp);
+        const acts = el('div', 'flex gap-1');
 
-      const acts = el('div', 'flex gap-1');
+        if (inv.pending) {
+          const resendBtn = el('button', 'btn btn-small btn-secondary', t('admin.inv.resend'));
+          resendBtn.onclick = async () => {
+            resendBtn.disabled = true;
+            try {
+              const r = await POST(`/admin/invitations/${inv.id}/resend`);
+              showInviteLink(r.invite_url);
+              loadInvList();
+            } catch (e) { resendBtn.disabled = false; alert(e.message); }
+          };
+          acts.appendChild(resendBtn);
+        }
 
-      if (inv.pending) {
-        const resendBtn = el('button', 'btn btn-small btn-secondary', t('admin.inv.resend'));
-        resendBtn.onclick = async () => {
-          resendBtn.disabled = true;
-          try {
-            const r = await POST(`/admin/invitations/${inv.id}/resend`);
-            const fb = el('span', 'text-sm');
-            if (r.email_sent) {
-              fb.style.color = 'var(--success)'; fb.textContent = ' ✓ ' + t('admin.inv.email_sent');
-            } else {
-              fb.style.color = 'var(--warning, #f0a500)'; fb.textContent = ' ⚠ ' + t('admin.inv.email_not_sent');
-            }
-            acts.appendChild(fb);
-            setTimeout(() => renderAdminTab('invitations'), 2000);
-          } catch (e) {
-            resendBtn.disabled = false;
-            alert(e.message);
-          }
+        const delBtn = el('button', 'btn btn-small btn-danger', t('admin.inv.revoke'));
+        delBtn.onclick = async () => {
+          try { await DEL(`/admin/invitations/${inv.id}`); loadInvList(); }
+          catch (e) { alert(e.message); }
         };
-        acts.appendChild(resendBtn);
+        acts.appendChild(delBtn);
+
+        row.append(info, acts);
+        list.appendChild(row);
       }
+    }).catch(e => { list.textContent = t('error') + ': ' + e.message; });
+  }
+  loadInvList();
 
-      const delBtn = el('button', 'btn btn-small btn-danger', t('admin.inv.revoke'));
-      delBtn.onclick = async () => {
-        try { await DEL(`/admin/invitations/${inv.id}`); renderAdminTab('invitations'); }
-        catch (e) { alert(e.message); }
-      };
-      acts.appendChild(delBtn);
-
-      row.append(info, acts);
-      list.appendChild(row);
-    }
-  }).catch(e => { list.textContent = t('error') + ': ' + e.message; });
-
-  inviteSection.append(form, inviteErr, list);
+  inviteSection.append(form, inviteErr, inviteLinkBox, list);
   frag.appendChild(inviteSection);
   return frag;
 }
