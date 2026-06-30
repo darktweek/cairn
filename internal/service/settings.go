@@ -369,9 +369,20 @@ func (s *settingsService) FaviconURL(ctx context.Context) string {
 	return v
 }
 
+// sanitizeHeader strips CR and LF to prevent CRLF injection in email headers.
+func sanitizeHeader(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\r' || r == '\n' {
+			return -1
+		}
+		return r
+	}, s)
+}
+
 func (s *settingsService) SetBranding(ctx context.Context, siteName, faviconURL string) error {
-	if strings.TrimSpace(siteName) != "" {
-		if err := s.repos.Settings.Set(ctx, "site_name", strings.TrimSpace(siteName)); err != nil {
+	name := sanitizeHeader(strings.TrimSpace(siteName))
+	if name != "" {
+		if err := s.repos.Settings.Set(ctx, "site_name", name); err != nil {
 			return err
 		}
 	}
