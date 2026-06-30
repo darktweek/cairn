@@ -2,9 +2,9 @@ name: cairn
 
 services:
   cairn:
-    # No published image — the image is built locally from this repo.
-    build: .
-    image: cairn:latest
+    # Prebuilt multi-arch image (linux/amd64, linux/arm64) published to GHCR.
+    # To build from source instead, add `build: .` in compose.override.yaml.
+    image: ghcr.io/darktweek/cairn:latest
     container_name: cairn
     restart: unless-stopped
 

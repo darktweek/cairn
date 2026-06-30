@@ -55,84 +55,64 @@ Type `!menu` (or your configured bang) for the full-screen hub.
 
 ## Requirements
 
-- **Docker** and **Docker Compose** — that's it.  
-  Go does not need to be installed on your machine; everything builds inside Docker.
+**Docker** (Compose recommended) — that's it. A prebuilt multi-arch image
+(`linux/amd64`, `linux/arm64`) is published to GHCR, so nothing is compiled on
+your machine:
+
+```
+ghcr.io/darktweek/cairn:latest   # or pin a version, e.g. :v0.2.3
+```
 
 ---
 
-## Quick start (5 minutes)
+## Quick start
 
-### Step 1 — Clone the repo
+### Option A — one command
 
 ```bash
-git clone https://github.com/darktweek/cairn.git
-cd cairn
+docker run -d --name cairn -p 8080:8080 \
+  -e CAIRN_BASE_URL=http://localhost:8080 \
+  -e CAIRN_SESSION_SECRET="$(openssl rand -base64 32)" \
+  -v cairn_data:/data \
+  ghcr.io/darktweek/cairn:latest
 ```
 
-### Step 2 — Create your `.env` file
+Open **http://localhost:8080**, click **Sign in → Register** — the **first account
+becomes the instance owner**. That's it.
 
-```bash
-cp .env.example .env
+### Option B — Docker Compose (recommended)
+
+Create a `compose.yaml`:
+
+```yaml
+services:
+  cairn:
+    image: ghcr.io/darktweek/cairn:latest
+    container_name: cairn
+    restart: unless-stopped
+    ports:
+      - "8080:8080"                              # remove when behind a reverse proxy
+    environment:
+      CAIRN_BASE_URL: "http://localhost:8080"    # your public URL in production
+      CAIRN_SESSION_SECRET: "change-me"          # openssl rand -base64 32
+    volumes:
+      - cairn_data:/data
+volumes:
+  cairn_data:
 ```
 
-Open `.env` and fill in the required values:
-
 ```bash
-# Generate a random secret:  openssl rand -base64 32
-CAIRN_SESSION_SECRET=your-random-secret-here
-
-# SMTP credentials (needed to send invitation/setup emails)
-CAIRN_SMTP_USER=you@example.com
-CAIRN_SMTP_PASS=your-smtp-password
+docker compose up -d
 ```
 
 > **No SMTP?** You can run entirely without it. Create your **owner** account from
-> the login page's *Register* link (open registration is on by default and
-> auto-disables afterwards). To add more users, go to **Admin → Invitations**,
-> create an invite, and **copy the invite link** shown right after — no email
-> needed. SMTP is only required to *deliver* invitations (and password resets) by
-> email automatically.
+> the *Register* link (open registration is on by default and auto-disables once
+> that first account exists). To add more users, go to **Admin → Invitations** and
+> **copy the invite link** shown right after creating one — no email needed. SMTP
+> only *delivers* invitations and password resets automatically.
 
-### Step 3 — Create your `compose.override.yaml`
-
-`compose.yaml` is the public, generic base. Your personal settings (domain, SMTP, reverse proxy labels) go in `compose.override.yaml` — Docker Compose merges it automatically, and it is gitignored so it never gets committed.
-
-Copy the example and adapt it:
-
-```bash
-cp compose.override.yaml.example compose.override.yaml
-```
-
-**For local / standalone use** (no reverse proxy), the example already adds `ports: - "8080:8080"` — just set your base URL:
-
-```yaml
-# compose.override.yaml
-services:
-  cairn:
-    ports:
-      - "8080:8080"
-    environment:
-      CAIRN_BASE_URL: "http://localhost:8080"
-```
-
-**For production behind a reverse proxy** (Traefik, Nginx…), remove the `ports` block and add your proxy config instead (see the example file for Traefik labels).
-
-### Step 4 — Build & start
-
-There is no published Docker image (yet) — the image is **built locally from this repo**, automatically:
-
-```bash
-docker compose up -d --build
-```
-
-The first run downloads the Go builder image and compiles everything (~2 minutes). Subsequent starts are instant.
-
-### Step 5 — Open in your browser
-
-Go to [http://localhost:8080](http://localhost:8080) and click **Sign in**.  
-**The very first account created automatically becomes admin.**
-
-That's it — you're running Cairn.
+Pin a version with `:v0.2.3` instead of `:latest`. See the
+[Configuration reference](#configuration-reference) for all environment variables.
 
 ---
 
@@ -222,16 +202,23 @@ Use the **Test** button in Admin → Settings → SMTP to verify delivery before
 
 ## Behind a reverse proxy
 
-Put your reverse proxy config in `compose.override.yaml` (gitignored) so it never pollutes the public file.
+Serve Cairn over HTTPS behind your proxy: **remove the `ports` mapping** from the
+`cairn` service and let the proxy reach it. Keep `CAIRN_TRUSTED_PROXY=true` (the
+default) so client IPs are read from `X-Forwarded-For`, and set `CAIRN_BASE_URL`
+to your public `https://…` URL (this also makes session cookies `Secure`).
 
 ### Traefik
 
 ```yaml
-# compose.override.yaml
 services:
   cairn:
+    image: ghcr.io/darktweek/cairn:latest
+    restart: unless-stopped
     environment:
       CAIRN_BASE_URL: "https://start.example.com"
+      CAIRN_SESSION_SECRET: "change-me"
+    volumes:
+      - cairn_data:/data
     networks:
       - traefik_proxy
     labels:
@@ -241,14 +228,16 @@ services:
       traefik.http.routers.cairn.tls.certresolver: "cloudflare"
       traefik.http.services.cairn.loadbalancer.server.port: "8080"
 
+volumes:
+  cairn_data:
 networks:
   traefik_proxy:
     external: true
 ```
 
-Set `CAIRN_TRUSTED_PROXY=true` (already the default) so client IPs are read correctly from `CF-Connecting-IP` / `X-Forwarded-For`.
-
 ### Nginx
+
+Keep `ports: - "127.0.0.1:8080:8080"` on the service, then:
 
 ```nginx
 location / {
@@ -257,8 +246,6 @@ location / {
     proxy_set_header   X-Forwarded-For   $remote_addr;
 }
 ```
-
-Add `ports: - "8080:8080"` in your `compose.override.yaml` when using Nginx with host-network routing.
 
 ---
 
@@ -319,19 +306,27 @@ Three system roles are seeded — **owner** (all permissions), **admin** (day-to
 
 ---
 
-## Making changes
+## Build from source (contributors)
 
-You don't need Go installed on your machine — everything compiles inside Docker.
-
-The workflow is simple: edit the code, then rebuild and restart the container:
+You don't need Go installed — everything builds in Docker.
 
 ```bash
-docker compose up -d --build
+git clone https://github.com/darktweek/cairn.git
+cd cairn
+
+# Build the image locally
+docker build -t cairn:dev .
+
+# …or run the CI pipeline (build, vet, test)
+docker run --rm -v "$PWD":/src -w /src golang:1.26 \
+  sh -c 'go build ./... && go vet ./... && go test ./...'
 ```
 
-That's it. The `--build` flag recompiles the app with your changes before restarting it.
+To run your local build with Compose, add `build: .` (and `image: cairn:dev`) to
+the `cairn` service. Set `CAIRN_ENV: development` for human-readable logs.
 
-**Tip:** set `CAIRN_ENV: "development"` in `compose.yaml` to get human-readable text logs instead of JSON.
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the dev workflow and contributor
+license terms.
 
 ---
 
@@ -354,7 +349,8 @@ cairn/
 │   └── app.js          — vanilla JS SPA (zero dependencies)
 ├── .env.example        — environment variable template
 ├── Dockerfile          — multi-stage build → ~5 MB scratch image
-└── compose.yaml        — production deployment with Traefik labels
+├── compose.yaml        — deployment (pulls the GHCR image)
+└── .github/workflows/  — CI (build/vet/test) + Release (GHCR image on tags)
 ```
 
 ---
