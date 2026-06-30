@@ -1012,6 +1012,7 @@ async function loadBookmarks() {
     offset:        S.bmOffset,
     limit:         S.bmLimit,
     collection_id: S.currentColId,
+    hidden:        '1', // panel is a management view; always show hidden bookmarks
   });
   if (S.bmFilter)   params.set('search', S.bmFilter);
   if (S.bmFolderId) params.set('folder_id', S.bmFolderId);
