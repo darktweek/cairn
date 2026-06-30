@@ -371,13 +371,13 @@ func (s *bookmarkService) GenerateBookmarklet(ctx context.Context, userID, ip, u
 	}
 
 	js := fmt.Sprintf(`javascript:(function(){`+
-		`var u=encodeURIComponent(location.href);`+
-		`var t=encodeURIComponent(document.title);`+
+		`var u=location.href;`+
+		`var t=document.title;`+
 		`fetch('%s/api/bookmarks/quick',{`+
 		`method:'POST',`+
 		`headers:{'Content-Type':'application/json'},`+
 		`body:JSON.stringify({url:u,title:t,token:'%s'})`+
-		`}).then(function(){alert('Bookmark sauvegardé')}).catch(function(){alert('Erreur')});`+
+		`}).then(function(r){if(!r.ok)throw new Error(r.status);alert('Bookmark sauvegardé')}).catch(function(){alert('Erreur')});`+
 		`})();`,
 		s.cfg.BaseURL, token,
 	)
