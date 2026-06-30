@@ -431,6 +431,9 @@ type netscapeItem struct {
 
 // parseNetscape parses the Netscape bookmarks HTML format.
 // It reconstructs the full folder hierarchy, not just the immediate parent.
+//
+// Note: Go's html.Parse (HTML5) places the nested <DL> *inside* the <DT>,
+// so the actual tree is DT > [H3, DL] rather than DT and DL being siblings.
 func parseNetscape(data []byte) ([]netscapeItem, error) {
 	doc, err := html.Parse(bytes.NewReader(data))
 	if err != nil {
@@ -440,7 +443,11 @@ func parseNetscape(data []byte) ([]netscapeItem, error) {
 	var items []netscapeItem
 	var walk func(n *html.Node, path []string)
 	walk = func(n *html.Node, path []string) {
-		if n.Type == html.ElementNode && strings.ToUpper(n.Data) == "A" {
+		if n.Type != html.ElementNode {
+			return
+		}
+		switch strings.ToUpper(n.Data) {
+		case "A":
 			item := netscapeItem{folderPath: path}
 			for _, attr := range n.Attr {
 				if strings.ToUpper(attr.Key) == "HREF" {
@@ -452,27 +459,31 @@ func parseNetscape(data []byte) ([]netscapeItem, error) {
 				items = append(items, item)
 			}
 			return // don't recurse into <A>
+
+		case "DT":
+			if h3 := firstChildByTag(n, "H3"); h3 != nil {
+				// Folder heading: add segment to path, then recurse into DT's
+				// children (the nested <DL> lives inside this same <DT>).
+				folderPath := append(append([]string(nil), path...), textContent(h3))
+				for c := n.FirstChild; c != nil; c = c.NextSibling {
+					if c.Type == html.ElementNode && strings.ToUpper(c.Data) == "H3" {
+						continue // already captured above
+					}
+					walk(c, folderPath)
+				}
+				return
+			}
+			// DT containing a bookmark — recurse normally.
 		}
 
-		// Walk children. In Netscape format each folder is a DT>H3 immediately
-		// followed by a sibling DL. We carry the updated path across siblings so
-		// that the DL after a DT>H3 receives the folder name set by that H3.
-		curPath := path
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			if c.Type == html.ElementNode && strings.ToUpper(c.Data) == "DT" {
-				if h3 := firstChildByTag(c, "H3"); h3 != nil {
-					name := textContent(h3)
-					newPath := make([]string, len(path), len(path)+1)
-					copy(newPath, path)
-					curPath = append(newPath, name)
-					continue // DT>H3 itself has no bookmarks
-				}
-			}
-			walk(c, curPath)
+			walk(c, path)
 		}
 	}
 
-	walk(doc, nil)
+	for c := doc.FirstChild; c != nil; c = c.NextSibling {
+		walk(c, nil)
+	}
 	return items, nil
 }
 
