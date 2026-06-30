@@ -1,16 +1,16 @@
 <!DOCTYPE html>
 <html lang="fr">
-<head><meta charset="UTF-8"><title>Bienvenue sur Cairn</title></head>
+<head><meta charset="UTF-8"><title>Bienvenue sur {{.SiteName}}</title></head>
 <body style="font-family:serif;max-width:480px;margin:40px auto;color:#1a1a1a;">
-  <h2 style="font-weight:normal;">Bienvenue sur Cairn</h2>
+  <h2 style="font-weight:normal;">Bienvenue sur {{.SiteName}}</h2>
   <p>Bonjour {{.Username}},</p>
   <p>Votre compte a été créé avec succès. Vous pouvez dès maintenant vous connecter.</p>
   <p>
     <a href="{{.BaseURL}}" style="display:inline-block;padding:10px 20px;background:#1a1a1a;color:#fff;text-decoration:none;">
-      Accéder à Cairn
+      Accéder à {{.SiteName}}
     </a>
   </p>
   <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
-  <p style="color:#999;font-size:0.8em;">Cairn — votre start page personnelle</p>
+  <p style="color:#999;font-size:0.8em;">{{.SiteName}} — votre start page personnelle</p>
 </body>
 </html>

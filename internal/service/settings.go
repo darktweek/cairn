@@ -36,8 +36,9 @@ type SettingsService interface {
 
 	SystemInfo() SystemInfo
 
-	// TODO: SiteName — custom site name shown in the browser tab title and emails.
-	// TODO: FaviconURL — custom favicon URL or uploaded file path.
+	SiteName(ctx context.Context) string
+	FaviconURL(ctx context.Context) string
+	SetBranding(ctx context.Context, siteName, faviconURL string) error
 }
 
 // SMTPSettings is the resolved mail configuration. When Locked it comes from the
@@ -352,6 +353,30 @@ func (s *settingsService) SetRuntime(ctx context.Context, totpIssuer string, wal
 		if err := s.repos.Settings.Set(ctx, "bookmarklet_days", strconv.Itoa(bookmarkletDays)); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (s *settingsService) SiteName(ctx context.Context) string {
+	if v, err := s.repos.Settings.Get(ctx, "site_name"); err == nil && v != "" {
+		return v
+	}
+	return "Cairn"
+}
+
+func (s *settingsService) FaviconURL(ctx context.Context) string {
+	v, _ := s.repos.Settings.Get(ctx, "favicon_url")
+	return v
+}
+
+func (s *settingsService) SetBranding(ctx context.Context, siteName, faviconURL string) error {
+	if strings.TrimSpace(siteName) != "" {
+		if err := s.repos.Settings.Set(ctx, "site_name", strings.TrimSpace(siteName)); err != nil {
+			return err
+		}
+	}
+	if err := s.repos.Settings.Set(ctx, "favicon_url", strings.TrimSpace(faviconURL)); err != nil {
+		return err
 	}
 	return nil
 }

@@ -2514,6 +2514,13 @@ function buildAdminSystem() {
     const i = el('input', 'form-input'); i.type = 'number'; i.placeholder = ph || ''; g.appendChild(i);
     return { g, i };
   };
+  const mkText = (labelTxt, ph) => {
+    const g = el('div', 'form-group'); g.appendChild(el('label', 'form-label', labelTxt));
+    const i = el('input', 'form-input'); i.type = 'text'; i.placeholder = ph || ''; g.appendChild(i);
+    return { g, i };
+  };
+  const fSiteName = mkText('Site name', 'Cairn');
+  const fFavicon  = mkText('Favicon URL', 'https://example.com/favicon.ico');
   const fTotp = (() => {
     const g = el('div', 'form-group'); g.appendChild(el('label', 'form-label', 'TOTP issuer name'));
     const i = el('input', 'form-input'); i.type = 'text'; g.appendChild(i);
@@ -2549,6 +2556,8 @@ function buildAdminSystem() {
   const lockField = (f, locked) => { if (locked) { f.i.disabled = true; f.i.title = 'Défini dans le compose'; } };
 
   GET('/admin/settings/system').then(s => {
+    fSiteName.i.value = s.editable.site_name || '';
+    fFavicon.i.value  = s.editable.favicon_url || '';
     fTotp.i.value = s.editable.totp_issuer.value;     lockField(fTotp, s.editable.totp_issuer.locked);
     fWp.i.value   = s.editable.wallpaper_limit.value;  lockField(fWp,   s.editable.wallpaper_limit.locked);
     fBm.i.value   = s.editable.bookmarklet_days.value; lockField(fBm,   s.editable.bookmarklet_days.locked);
@@ -2593,6 +2602,8 @@ function buildAdminSystem() {
     msg.className = 'error-msg'; msg.textContent = '';
     try {
       await PUT('/admin/settings/system', {
+        site_name:        fSiteName.i.value.trim(),
+        favicon_url:      fFavicon.i.value.trim(),
         totp_issuer:      fTotp.i.value.trim(),
         wallpaper_limit:  parseInt(fWp.i.value, 10) || 0,
         bookmarklet_days: parseInt(fBm.i.value, 10) || 0,
@@ -2646,7 +2657,7 @@ function buildAdminSystem() {
   smtpWrap.append(el('div','settings-section-title', t('admin.section.smtp')), smtpStatus,
     fHost.g, fPort.g, fUser.g, fPass.g, fFrom.g, fTls.g, smtpBtnRow, smtpMsg);
 
-  wrap.append(fTotp.g, fWp.g, fBm.g, saveBtn, msg, smtpWrap, roWrap);
+  wrap.append(fSiteName.g, fFavicon.g, fTotp.g, fWp.g, fBm.g, saveBtn, msg, smtpWrap, roWrap);
   return wrap;
 }
 
@@ -2945,7 +2956,14 @@ async function checkPublicConfig() {
   try {
     const cfg = await GET('/auth/config');
     toggle('register-link', !!cfg.open_registration);
-  } catch { /* ignore — keep link hidden */ }
+    if (cfg.site_name) {
+      document.title = cfg.site_name;
+      const h1 = document.querySelector('.login-title');
+      if (h1) h1.textContent = cfg.site_name;
+    }
+    const favicon = document.getElementById('favicon');
+    if (favicon) favicon.href = cfg.favicon_url || '';
+  } catch { /* ignore — keep defaults */ }
 }
 
 /* ─── Setup page (invite token or pending-registration token) ─────────────── */

@@ -23,6 +23,8 @@ func (h *Handler) AdminGetSystemSettings(w http.ResponseWriter, r *http.Request)
 			"totp_issuer":      map[string]any{"value": totp.Value, "locked": totp.Locked},
 			"wallpaper_limit":  map[string]any{"value": wp.Value, "locked": wp.Locked},
 			"bookmarklet_days": map[string]any{"value": bm.Value, "locked": bm.Locked},
+			"site_name":        h.Settings.SiteName(ctx),
+			"favicon_url":      h.Settings.FaviconURL(ctx),
 		},
 		// SMTP — editable unless env-managed; password is write-only.
 		"smtp": map[string]any{
@@ -57,6 +59,8 @@ func (h *Handler) AdminSetSystemSettings(w http.ResponseWriter, r *http.Request)
 		TOTPIssuer      string `json:"totp_issuer"`
 		WallpaperLimit  int    `json:"wallpaper_limit"`
 		BookmarkletDays int    `json:"bookmarklet_days"`
+		SiteName        string `json:"site_name"`
+		FaviconURL      string `json:"favicon_url"`
 		SMTP            *struct {
 			Host string `json:"host"`
 			Port int    `json:"port"`
@@ -73,6 +77,12 @@ func (h *Handler) AdminSetSystemSettings(w http.ResponseWriter, r *http.Request)
 	if err := h.Settings.SetRuntime(r.Context(), body.TOTPIssuer, body.WallpaperLimit, body.BookmarkletDays); err != nil {
 		writeError(w, err)
 		return
+	}
+	if body.SiteName != "" || body.FaviconURL != "" {
+		if err := h.Settings.SetBranding(r.Context(), body.SiteName, body.FaviconURL); err != nil {
+			writeError(w, err)
+			return
+		}
 	}
 	if body.SMTP != nil {
 		err := h.Settings.SetSMTP(r.Context(), service.SMTPSettings{

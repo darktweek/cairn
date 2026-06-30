@@ -67,11 +67,14 @@ func newEmailService(cfg *config.Config, settings SettingsService) EmailService 
 
 func (s *emailService) SendPasswordReset(ctx context.Context, email, token string) error {
 	resetURL := fmt.Sprintf("%s/reset-password?token=%s", s.cfg.BaseURL, token)
+	siteName := s.settings.SiteName(ctx)
 
 	data := struct {
+		SiteName string
 		Username string
 		ResetURL string
 	}{
+		SiteName: siteName,
 		Username: email,
 		ResetURL: resetURL,
 	}
@@ -82,17 +85,20 @@ func (s *emailService) SendPasswordReset(ctx context.Context, email, token strin
 		return nil
 	}
 
-	if err := s.send(ctx, email, "Réinitialisation de mot de passe — Cairn", body); err != nil && !errors.Is(err, ErrSMTPNotConfigured) {
+	if err := s.send(ctx, email, "Réinitialisation de mot de passe — "+siteName, body); err != nil && !errors.Is(err, ErrSMTPNotConfigured) {
 		slog.Error("send password reset email", "err", err)
 	}
 	return nil
 }
 
 func (s *emailService) SendWelcome(ctx context.Context, email, username string) error {
+	siteName := s.settings.SiteName(ctx)
 	data := struct {
+		SiteName string
 		Username string
 		BaseURL  string
 	}{
+		SiteName: siteName,
 		Username: username,
 		BaseURL:  s.cfg.BaseURL,
 	}
@@ -103,7 +109,7 @@ func (s *emailService) SendWelcome(ctx context.Context, email, username string) 
 		return nil
 	}
 
-	if err := s.send(ctx, email, "Bienvenue sur Cairn", body); err != nil && !errors.Is(err, ErrSMTPNotConfigured) {
+	if err := s.send(ctx, email, "Bienvenue sur "+siteName, body); err != nil && !errors.Is(err, ErrSMTPNotConfigured) {
 		slog.Error("send welcome email", "err", err)
 	}
 	return nil
@@ -112,10 +118,13 @@ func (s *emailService) SendWelcome(ctx context.Context, email, username string) 
 // SendInvitation returns nil on success, ErrSMTPNotConfigured when SMTP is not
 // set up, or an error when SMTP is configured but delivery fails.
 func (s *emailService) SendInvitation(ctx context.Context, email, inviteURL string, expiresAt time.Time) error {
+	siteName := s.settings.SiteName(ctx)
 	data := struct {
+		SiteName  string
 		InviteURL string
 		ExpiresAt string
 	}{
+		SiteName:  siteName,
 		InviteURL: inviteURL,
 		ExpiresAt: expiresAt.Format("02/01/2006 à 15:04"),
 	}
@@ -123,15 +132,18 @@ func (s *emailService) SendInvitation(ctx context.Context, email, inviteURL stri
 	if err != nil {
 		return fmt.Errorf("render invitation email: %w", err)
 	}
-	return s.send(ctx, email, "Invitation à rejoindre Cairn", body)
+	return s.send(ctx, email, "Invitation à rejoindre "+siteName, body)
 }
 
 func (s *emailService) SendAccountSetup(ctx context.Context, email, username, setupURL string, expiresAt time.Time) error {
+	siteName := s.settings.SiteName(ctx)
 	data := struct {
+		SiteName  string
 		Username  string
 		SetupURL  string
 		ExpiresAt string
 	}{
+		SiteName:  siteName,
 		Username:  username,
 		SetupURL:  setupURL,
 		ExpiresAt: expiresAt.Format("02/01/2006 à 15:04"),
@@ -141,19 +153,20 @@ func (s *emailService) SendAccountSetup(ctx context.Context, email, username, se
 		slog.Error("render account setup email", "err", err)
 		return nil
 	}
-	if err := s.send(ctx, email, "Finalisez votre compte Cairn", body); err != nil && !errors.Is(err, ErrSMTPNotConfigured) {
+	if err := s.send(ctx, email, "Finalisez votre compte "+siteName, body); err != nil && !errors.Is(err, ErrSMTPNotConfigured) {
 		slog.Error("send account setup email", "err", err)
 	}
 	return nil
 }
 
 func (s *emailService) SendTestEmail(ctx context.Context, to string) error {
+	siteName := s.settings.SiteName(ctx)
 	body := `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:480px;margin:40px auto;padding:20px">` +
-		`<h2 style="color:#1a1a2e">Test SMTP — Cairn</h2>` +
+		`<h2 style="color:#1a1a2e">Test SMTP — ` + template.HTMLEscapeString(siteName) + `</h2>` +
 		`<p>Si vous voyez cet email, votre configuration SMTP fonctionne correctement.</p>` +
-		`<p style="color:#888;font-size:12px">Envoyé depuis l'interface d'administration Cairn.</p>` +
+		`<p style="color:#888;font-size:12px">Envoyé depuis l'interface d'administration ` + template.HTMLEscapeString(siteName) + `.</p>` +
 		`</body></html>`
-	if err := s.send(ctx, to, "Test SMTP — Cairn", body); err != nil {
+	if err := s.send(ctx, to, "Test SMTP — "+siteName, body); err != nil {
 		if errors.Is(err, ErrSMTPNotConfigured) {
 			return fmt.Errorf("%w: SMTP non configuré", ErrInvalidInput)
 		}
@@ -163,14 +176,17 @@ func (s *emailService) SendTestEmail(ctx context.Context, to string) error {
 }
 
 func (s *emailService) SendCollectionShared(ctx context.Context, email, sharer, collectionName string) error {
+	siteName := s.settings.SiteName(ctx)
 	body := fmt.Sprintf(`<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:480px;margin:40px auto;padding:20px">`+
-		`<h2 style="color:#1a1a2e">Une collection a été partagée avec vous — Cairn</h2>`+
+		`<h2 style="color:#1a1a2e">Une collection a été partagée avec vous — %s</h2>`+
 		`<p><strong>%s</strong> a partagé la collection « <strong>%s</strong> » avec vous.</p>`+
-		`<p><a href="%s" style="color:#4f46e5">Ouvrir Cairn</a></p>`+
-		`<p style="color:#888;font-size:12px">Vous recevez cet email car votre compte Cairn a reçu un accès partagé.</p>`+
+		`<p><a href="%s" style="color:#4f46e5">Ouvrir %s</a></p>`+
+		`<p style="color:#888;font-size:12px">Vous recevez cet email car votre compte %s a reçu un accès partagé.</p>`+
 		`</body></html>`,
-		template.HTMLEscapeString(sharer), template.HTMLEscapeString(collectionName), s.cfg.BaseURL)
-	if err := s.send(ctx, email, "Collection partagée — Cairn", body); err != nil && !errors.Is(err, ErrSMTPNotConfigured) {
+		template.HTMLEscapeString(siteName),
+		template.HTMLEscapeString(sharer), template.HTMLEscapeString(collectionName), s.cfg.BaseURL,
+		template.HTMLEscapeString(siteName), template.HTMLEscapeString(siteName))
+	if err := s.send(ctx, email, "Collection partagée — "+siteName, body); err != nil && !errors.Is(err, ErrSMTPNotConfigured) {
 		slog.Error("send collection shared email", "err", err)
 	}
 	return nil

@@ -3,16 +3,23 @@
 All notable changes to Cairn are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are date-stamped.
 
+## v0.2.5 — Custom branding — 2026-06-30
+
+### Added
+- **Custom site name**: admins can set the name shown in the browser tab, the
+  login page title, and all outgoing emails (Admin → Settings → Site name).
+  Defaults to `Cairn` when not set.
+- **Custom favicon**: admins can provide a favicon URL (Admin → Settings →
+  Favicon URL). The browser tab icon updates immediately without a page reload.
+- Both values are exposed on the public `/api/auth/config` endpoint so the
+  branding is applied even before login.
+
 ## v0.2.4 — First-account SMTP bypass — 2026-06-30
 
 ### Added
 - **First-account setup without SMTP**: when no user exists yet, the registration
   setup URL is printed prominently in the container logs (WARN level) so a fresh
   install can be bootstrapped without configuring a mail server first.
-
-### Planned
-- Custom site name (shown in browser tab and emails).
-- Custom favicon (uploaded file or URL).
 
 ## v0.2.3 — Source link & CI — 2026-06-30
 

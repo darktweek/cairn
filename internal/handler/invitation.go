@@ -174,13 +174,18 @@ func (h *Handler) RegisterWithInviteCheck(w http.ResponseWriter, r *http.Request
 	})
 }
 
-// PublicAuthConfig — GET /api/auth/config (public): returns open_registration flag.
+// PublicAuthConfig — GET /api/auth/config (public): returns open_registration flag and branding.
 func (h *Handler) PublicAuthConfig(w http.ResponseWriter, r *http.Request) {
-	open, err := h.Invitation.IsOpenRegistration(r.Context())
+	ctx := r.Context()
+	open, err := h.Invitation.IsOpenRegistration(ctx)
 	if err != nil {
 		open = false
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"open_registration": open})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"open_registration": open,
+		"site_name":         h.Settings.SiteName(ctx),
+		"favicon_url":       h.Settings.FaviconURL(ctx),
+	})
 }
 
 // AdminGetRegistrationSettings — GET /api/admin/settings/registration
