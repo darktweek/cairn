@@ -201,8 +201,13 @@ func buildRouter(cfg *config.Config, h *handler.Handler, svcs *service.Services)
 	})
 
 	// Bookmarklet quick-save — special auth from body token.
-	r.With(middleware.BookmarkletAuth(svcs.Auth)).
+	// Auth is token-based (no session cookie), so any Origin is fine.
+	r.With(middleware.BookmarkletCORS, middleware.BookmarkletAuth(svcs.Auth)).
 		Post("/api/bookmarks/quick", h.QuickBookmark)
+	r.With(middleware.BookmarkletCORS).
+		Options("/api/bookmarks/quick", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		})
 
 	// Authenticated routes.
 	r.Group(func(r chi.Router) {
