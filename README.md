@@ -1,7 +1,7 @@
 # Cairn
 
 A self-hosted personal start page — new-tab replacement for your browser.  
-Clock, ambient effects, wallpapers, configurable search, bookmarks, multi-user with admin panel.
+Clock, ambient effects, wallpapers, configurable search, bookmarks, collaboration, multi-user with admin panel.
 
 > **No cloud. No tracking. Runs entirely on your own machine or server.**
 
@@ -26,6 +26,7 @@ This project is **100% vibecoded** — designed and built in conversation with A
 ![Login](docs/screenshot-login.png)
 
 Type `!bm` in the search bar to open the bookmark manager.  
+Type `!h` to search your hidden bookmarks.  
 Type `!menu` (or your configured bang) for the full-screen hub.
 
 ---
@@ -38,8 +39,9 @@ Type `!menu` (or your configured bang) for the full-screen hub.
 | **Wallpapers** | Images & videos, pin favorite, random rotation, adaptive light/dark theme via luminance sampling |
 | **Ambient effects** | Rain and dust canvas animations (opt-in per-user) |
 | **Search** | DuckDuckGo by default — Google, Brave, Bing, Kagi, or custom URL; per-user "open in new tab" option |
-| **Bangs** | `!bm` bookmarks, `!g` Google, `!yt` YouTube, `!gh` GitHub, `!hub` full menu, + all DDG bangs |
-| **Bookmarks** | Collections with a nested folder tree, tags, import/export Netscape format (Chrome/Firefox/Safari/Edge), mobile bookmarklet |
+| **Bangs** | `!bm` bookmarks, `!h` hidden bookmarks, `!g` Google, `!yt` YouTube, `!gh` GitHub, `!hub` full menu, + all DDG bangs |
+| **Bookmarks** | Collections with a nested folder tree, tags, import/export Netscape format (Chrome/Firefox/Safari/Edge), mobile bookmarklet; bookmarks can be **hidden** (excluded from search, accessible via `!h`) |
+| **Custom branding** | Site name and favicon URL configurable from Admin → Settings; applied even before login |
 | **Collaboration** | Share collections with individual users or whole groups — `view` / `edit` / `manage` permission levels, "shared" indicators, optional email notification |
 | **Roles & permissions (RBAC)** | Bitwarden-style roles over a granular permission catalog; seeded `owner` / `admin` / `user` plus custom roles; a user can hold **several** roles (effective permissions = union) |
 | **Groups / teams** | Bundle users into groups and grant a whole team access to a collection |
@@ -47,7 +49,7 @@ Type `!menu` (or your configured bang) for the full-screen hub.
 | **Multi-user** | First account created becomes the instance **owner** automatically |
 | **Invitations** | Admin invites by email (with delivery confirmation) **or** by copying the invite link — works without SMTP; open registration toggle |
 | **SSO / OIDC** | OpenID Connect (Authentik, Keycloak, Authelia, Google…) — JIT account provisioning |
-| **Admin panel** | User management, storage quotas, upload limits, SMTP test, audit log, pending registrations |
+| **Admin panel** | User management, storage quotas, upload limits, SMTP test, audit log, pending registrations, custom branding |
 | **Email** | Account setup & invitation emails; SMTP supports implicit TLS (port 465) and STARTTLS (port 587); configurable via env or admin UI |
 | **Audit log** | All security and admin actions logged and attributed to users; GDPR-compliant (no personal content logged, metadata preserved on account deletion) |
 
@@ -111,7 +113,7 @@ docker compose up -d
 > **copy the invite link** shown right after creating one — no email needed. SMTP
 > only *delivers* invitations and password resets automatically.
 
-Pin a version with `:0.2.3` instead of `:latest` (image tags are semver, no `v`
+Pin a version with `:0.2.7` instead of `:latest` (image tags are semver, no `v`
 prefix). See the [Configuration reference](#configuration-reference) for all
 environment variables.
 
@@ -262,6 +264,17 @@ location / {
 **Adaptive theme:** Cairn samples the luminance of your active wallpaper and automatically switches between light and dark text for readability.
 
 **Single pin:** Only one wallpaper can be pinned as favorite at a time. Pinning a new one automatically unpins the previous.
+
+---
+
+## Hidden bookmarks
+
+Any bookmark can be marked as **hidden** via the toggle in the add/edit modal.
+
+- Hidden bookmarks are **excluded from all searches** by default.
+- They remain visible in the bookmark manager panel (management view).
+- To search them, use `!h <query>` in the search bar — this searches hidden bookmarks only and opens the results in the bookmark panel.
+- Hidden bookmarks are shown with a 🔒 badge and dimmed style in the panel.
 
 ---
 
