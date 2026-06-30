@@ -37,6 +37,7 @@ type BookmarkService interface {
 	GenerateBookmarklet(ctx context.Context, userID, ip, userAgent string) (string, error)
 	ListTags(ctx context.Context, userID string) ([]*model.Tag, error)
 	DeleteTag(ctx context.Context, userID, tagID string) error
+	ClearAll(ctx context.Context, userID string) error
 }
 
 type bookmarkService struct {
@@ -390,6 +391,19 @@ func (s *bookmarkService) ListTags(ctx context.Context, userID string) ([]*model
 
 func (s *bookmarkService) DeleteTag(ctx context.Context, userID, tagID string) error {
 	return s.repos.Tags.Delete(ctx, tagID, userID)
+}
+
+func (s *bookmarkService) ClearAll(ctx context.Context, userID string) error {
+	if err := s.repos.Bookmarks.DeleteAllByUser(ctx, userID); err != nil {
+		return err
+	}
+	_ = s.repos.Audit.Log(ctx, &model.AuditEntry{
+		ID:        ulid.Make().String(),
+		UserID:    &userID,
+		Action:    "bookmark_clear_all",
+		CreatedAt: time.Now(),
+	})
+	return nil
 }
 
 func (s *bookmarkService) applyTags(ctx context.Context, bookmarkID, userID string, tagNames []string) error {

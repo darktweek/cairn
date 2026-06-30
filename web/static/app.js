@@ -1372,6 +1372,33 @@ async function createFolder() {
   } catch (err) { alert(err.message); }
 }
 
+function openClearBookmarksModal() {
+  $('modal-clear-confirm-input').value = '';
+  $('modal-clear-confirm').disabled = true;
+  $('modal-clear-error').textContent = '';
+  $('modal-clear-bookmarks').classList.remove('hidden');
+  $('modal-clear-confirm-input').focus();
+}
+
+function closeClearBookmarksModal() {
+  $('modal-clear-bookmarks').classList.add('hidden');
+}
+
+async function clearAllBookmarks() {
+  const btn = $('modal-clear-confirm');
+  btn.disabled = true;
+  $('modal-clear-error').textContent = '';
+  try {
+    await DEL('/bookmarks');
+    closeClearBookmarksModal();
+    await loadBookmarks();
+    await loadFolders();
+  } catch (err) {
+    $('modal-clear-error').textContent = err.message;
+    btn.disabled = false;
+  }
+}
+
 async function renameFolder(id, currentName) {
   const name = prompt(t('folder.prompt.rename'), currentName);
   if (!name || !name.trim() || name.trim() === currentName) return;
@@ -3317,6 +3344,15 @@ document.addEventListener('DOMContentLoaded', () => {
   $('bm-add-btn').addEventListener('click', openAddBookmark);
   $('bm-export-btn').addEventListener('click', exportBookmarks);
   $('bm-import-file').addEventListener('change', e => importBookmarks(e.target.files[0]));
+  $('bm-clear-btn').addEventListener('click', openClearBookmarksModal);
+  $('modal-clear-cancel').addEventListener('click', closeClearBookmarksModal);
+  $('modal-clear-confirm-input').addEventListener('input', () => {
+    $('modal-clear-confirm').disabled = $('modal-clear-confirm-input').value !== 'DELETE';
+  });
+  $('modal-clear-confirm').addEventListener('click', clearAllBookmarks);
+  $('modal-clear-bookmarks').addEventListener('click', e => {
+    if (e.target === $('modal-clear-bookmarks')) closeClearBookmarksModal();
+  });
   $('bm-search-input').addEventListener('input', () => {
     S.bmFilter = $('bm-search-input').value.trim();
     S.bmOffset = 0;

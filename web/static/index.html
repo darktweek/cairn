@@ -242,6 +242,7 @@
         <label class="btn btn-secondary bm-import-label" for="bm-import-file" data-i18n="bm.import">Import</label>
         <input type="file" id="bm-import-file" accept=".html" class="sr-only">
         <button class="btn btn-secondary" id="bm-export-btn" data-i18n="bm.export">Export</button>
+        <button class="btn btn-danger" id="bm-clear-btn" data-i18n="bm.clear">Clear all</button>
         <button class="panel-close" id="bm-close">✕</button>
       </div>
       <div class="bm-filter-bar">
@@ -397,6 +398,28 @@
       <div class="modal-footer">
         <button type="button" id="nu-cancel" class="btn btn-secondary" data-i18n="btn.cancel">Cancel</button>
         <button type="button" id="nu-save" class="btn btn-primary" data-i18n="admin.user.create.btn">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Clear all bookmarks confirmation modal ── -->
+  <div id="modal-clear-bookmarks" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-clear-warning">
+        <span class="modal-clear-icon">⚠</span>
+        <div class="modal-clear-warning-text">
+          <div class="modal-title" data-i18n="bm.clear.title">Clear all bookmarks</div>
+          <p class="text-sm text-dim" data-i18n="bm.clear.desc">This will permanently delete all your bookmarks, folders, and tags. This action cannot be undone.</p>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="modal-clear-confirm-input" data-i18n="bm.clear.confirm.label">Type <strong>DELETE</strong> to confirm</label>
+        <input type="text" id="modal-clear-confirm-input" class="form-input" placeholder="DELETE" autocomplete="off">
+      </div>
+      <div id="modal-clear-error" class="error-msg"></div>
+      <div class="modal-footer">
+        <button type="button" id="modal-clear-cancel" class="btn btn-secondary" data-i18n="btn.cancel">Cancel</button>
+        <button type="button" id="modal-clear-confirm" class="btn btn-danger" disabled data-i18n="bm.clear.btn">Delete all bookmarks</button>
       </div>
     </div>
   </div>

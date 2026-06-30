@@ -37,6 +37,7 @@ type BookmarkRepository interface {
 	RemoveTag(ctx context.Context, bookmarkID, tagID string) error
 	SetTags(ctx context.Context, bookmarkID string, tagIDs []string) error
 	BulkCreate(ctx context.Context, bookmarks []*model.Bookmark) error
+	DeleteAllByUser(ctx context.Context, userID string) error
 }
 
 type sqliteBookmarkRepo struct {
@@ -86,6 +87,11 @@ func (r *sqliteBookmarkRepo) Update(ctx context.Context, b *model.Bookmark) erro
 
 func (r *sqliteBookmarkRepo) Delete(ctx context.Context, id string) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM bookmarks WHERE id = ?`, id)
+	return err
+}
+
+func (r *sqliteBookmarkRepo) DeleteAllByUser(ctx context.Context, userID string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM bookmarks WHERE user_id = ?`, userID)
 	return err
 }
 

@@ -1060,6 +1060,27 @@ body.searching #date-line {
   color: var(--text);
 }
 
+.modal-clear-warning {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  border-radius: 0.5rem;
+  padding: 0.9rem 1rem;
+}
+
+.modal-clear-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  flex-shrink: 0;
+  color: var(--danger);
+  margin-top: 0.05rem;
+}
+
+.modal-clear-warning-text { display: flex; flex-direction: column; gap: 0.3rem; }
+.modal-clear-warning-text .modal-title { color: var(--danger); }
+
 .modal-footer {
   display: flex;
   gap: 0.5rem;

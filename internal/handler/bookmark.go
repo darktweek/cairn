@@ -179,6 +179,15 @@ func (h *Handler) ImportBookmarks(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) ClearBookmarks(w http.ResponseWriter, r *http.Request) {
+	user := middleware.UserFromCtx(r.Context())
+	if err := h.Bookmark.ClearAll(r.Context(), user.ID); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) ExportBookmarks(w http.ResponseWriter, r *http.Request) {
 	user := middleware.UserFromCtx(r.Context())
 
