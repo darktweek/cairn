@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -115,15 +116,33 @@ func (c *Config) validate() error {
 	return errors.Join(errs...)
 }
 
+// readEnv returns the value for key, with Docker Secrets support.
+// If <key>_FILE is set, the value is read from that file (trailing whitespace
+// stripped). Otherwise falls back to the plain env var.
+func readEnv(key string) string {
+	if path := os.Getenv(key + "_FILE"); path != "" {
+		if data, err := os.ReadFile(path); err == nil {
+			return strings.TrimRight(string(data), "\r\n ")
+		}
+	}
+	return os.Getenv(key)
+}
+
+// IsEnvManaged reports whether key is provided via env var or Docker Secret
+// (i.e. the value is locked and must not be overridden from the UI).
+func IsEnvManaged(key string) bool {
+	return os.Getenv(key) != "" || os.Getenv(key+"_FILE") != ""
+}
+
 func getEnv(key, def string) string {
-	if v := os.Getenv(key); v != "" {
+	if v := readEnv(key); v != "" {
 		return v
 	}
 	return def
 }
 
 func getEnvInt(key string, def int) int {
-	if v := os.Getenv(key); v != "" {
+	if v := readEnv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			return n
 		}
@@ -132,7 +151,7 @@ func getEnvInt(key string, def int) int {
 }
 
 func getEnvInt64(key string, def int64) int64 {
-	if v := os.Getenv(key); v != "" {
+	if v := readEnv(key); v != "" {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return n
 		}
@@ -141,7 +160,7 @@ func getEnvInt64(key string, def int64) int64 {
 }
 
 func getEnvBool(key string, def bool) bool {
-	if v := os.Getenv(key); v != "" {
+	if v := readEnv(key); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
 			return b
 		}

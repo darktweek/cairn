@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"os"
 	"strconv"
 	"strings"
 
@@ -239,7 +238,7 @@ func (s *settingsService) SystemInfo() SystemInfo {
 // SMTP resolves the mail configuration. The environment takes priority and
 // locks editing; otherwise values come from the admin-managed settings table.
 func (s *settingsService) SMTP(ctx context.Context) SMTPSettings {
-	if _, ok := os.LookupEnv("CAIRN_SMTP_HOST"); ok {
+	if config.IsEnvManaged("CAIRN_SMTP_HOST") {
 		return SMTPSettings{
 			Host:   s.cfg.SMTPHost,
 			Port:   s.cfg.SMTPPort,
@@ -269,7 +268,7 @@ func (s *settingsService) SMTP(ctx context.Context) SMTPSettings {
 }
 
 func (s *settingsService) SetSMTP(ctx context.Context, in SMTPSettings) error {
-	if _, ok := os.LookupEnv("CAIRN_SMTP_HOST"); ok {
+	if config.IsEnvManaged("CAIRN_SMTP_HOST") {
 		return ErrForbidden // env-locked
 	}
 	set := func(k, v string) error { return s.repos.Settings.Set(ctx, k, v) }
@@ -303,7 +302,7 @@ func (s *settingsService) SetSMTP(ctx context.Context, in SMTPSettings) error {
 // ── Runtime settings (env > DB > default) ──────────────────────────────────
 
 func (s *settingsService) TOTPIssuer(ctx context.Context) StringSetting {
-	if _, ok := os.LookupEnv("CAIRN_TOTP_ISSUER"); ok {
+	if config.IsEnvManaged("CAIRN_TOTP_ISSUER") {
 		return StringSetting{Value: s.cfg.TOTPIssuer, Locked: true}
 	}
 	if v, err := s.repos.Settings.Get(ctx, "totp_issuer"); err == nil && v != "" {
@@ -313,7 +312,7 @@ func (s *settingsService) TOTPIssuer(ctx context.Context) StringSetting {
 }
 
 func (s *settingsService) WallpaperLimit(ctx context.Context) IntSetting {
-	if _, ok := os.LookupEnv("CAIRN_DEFAULT_WALLPAPER_LIMIT"); ok {
+	if config.IsEnvManaged("CAIRN_DEFAULT_WALLPAPER_LIMIT") {
 		return IntSetting{Value: s.cfg.DefaultWallpaperLimit, Locked: true}
 	}
 	if v, err := s.repos.Settings.Get(ctx, "wallpaper_limit"); err == nil && v != "" {
@@ -325,7 +324,7 @@ func (s *settingsService) WallpaperLimit(ctx context.Context) IntSetting {
 }
 
 func (s *settingsService) BookmarkletDays(ctx context.Context) IntSetting {
-	if _, ok := os.LookupEnv("CAIRN_BOOKMARKLET_TOKEN_LIFETIME"); ok {
+	if config.IsEnvManaged("CAIRN_BOOKMARKLET_TOKEN_LIFETIME") {
 		return IntSetting{Value: s.cfg.BookmarkletTokenLifetime, Locked: true}
 	}
 	if v, err := s.repos.Settings.Get(ctx, "bookmarklet_days"); err == nil && v != "" {
