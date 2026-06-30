@@ -928,6 +928,17 @@ body.searching #date-line {
   padding: 0.6rem 0.8rem;
   margin: 0.5rem 0;
 }
+
+/* Source-code link (AGPL §13 — offer source to users of the running instance). */
+.app-source { margin-top: 1rem; text-align: center; }
+.hub-foot { margin-top: 1.25rem; text-align: center; }
+.app-source a, .hub-foot a {
+  color: var(--text-dimmer);
+  font-size: 0.72rem;
+  text-decoration: none;
+  letter-spacing: 0.03em;
+}
+.app-source a:hover, .hub-foot a:hover { color: var(--text-dim); text-decoration: underline; }
 .bm-author { font-size: 0.72rem; color: var(--text-dimmer); margin-left: 0.4rem; }
 
 .bm-folder-del {
