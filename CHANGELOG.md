@@ -3,6 +3,15 @@
 All notable changes to Cairn are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are date-stamped.
 
+## v0.2.7 — Hidden bookmarks fixes — 2026-06-30
+
+### Fixed
+- Hidden bookmarks now remain visible in the bookmarks management panel
+  (they were disappearing after being toggled).
+- Renamed the hidden-search bang from `!nsfw` to `!h`.
+- `!h` now appears in the bang autocomplete suggestions.
+- Typing `!h <query>` shows hidden bookmark suggestions inline.
+
 ## v0.2.6 — Hidden bookmarks — 2026-06-30
 
 ### Added
