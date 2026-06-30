@@ -3,6 +3,17 @@
 All notable changes to Cairn are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are date-stamped.
 
+## v0.2.3 — Source link & CI — 2026-06-30
+
+### Added
+- A discreet **"Source code (AGPL-3.0)"** link on the login page and in the hub,
+  offering the source to users of the running instance (AGPL §13).
+
+### CI
+- Bumped GitHub Actions to Node 24-compatible majors (checkout v7, setup-go v6,
+  docker setup/login/metadata/build-push v4–v7) — clears the Node 20 deprecation
+  warnings.
+
 ## v0.2.2 — Invite without SMTP — 2026-06-29
 
 ### Added
