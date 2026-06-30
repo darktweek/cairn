@@ -635,6 +635,21 @@ func (s *authService) RequestRegistration(ctx context.Context, username, email s
 	}
 
 	setupURL := s.cfg.BaseURL + "/setup?token=" + token
+
+	// For the very first account, SMTP is not required: log the setup URL prominently
+	// so the admin can complete setup directly from the container logs.
+	userCount, _ := s.repos.Users.Count(ctx)
+	if userCount == 0 {
+		slog.Warn("┌─────────────────────────────────────────────────────────────┐")
+		slog.Warn("│  FIRST ACCOUNT — complete your setup at the URL below       │")
+		slog.Warn("│  No SMTP required for this step.                            │")
+		slog.Warn("└─────────────────────────────────────────────────────────────┘",
+			"setup_url", setupURL,
+			"username", username,
+			"expires_at", pr.ExpiresAt.Format("2006-01-02 15:04:05"),
+		)
+	}
+
 	slog.Info("registration requested", "username", username, "email", email, "setup_url", setupURL)
 	_ = s.email.SendAccountSetup(ctx, email, username, setupURL, pr.ExpiresAt)
 

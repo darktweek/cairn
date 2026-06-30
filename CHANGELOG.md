@@ -3,6 +3,17 @@
 All notable changes to Cairn are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are date-stamped.
 
+## v0.2.4 — First-account SMTP bypass — 2026-06-30
+
+### Added
+- **First-account setup without SMTP**: when no user exists yet, the registration
+  setup URL is printed prominently in the container logs (WARN level) so a fresh
+  install can be bootstrapped without configuring a mail server first.
+
+### Planned
+- Custom site name (shown in browser tab and emails).
+- Custom favicon (uploaded file or URL).
+
 ## v0.2.3 — Source link & CI — 2026-06-30
 
 ### Added

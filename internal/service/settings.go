@@ -35,6 +35,9 @@ type SettingsService interface {
 	SetSMTP(ctx context.Context, in SMTPSettings) error
 
 	SystemInfo() SystemInfo
+
+	// TODO: SiteName — custom site name shown in the browser tab title and emails.
+	// TODO: FaviconURL — custom favicon URL or uploaded file path.
 }
 
 // SMTPSettings is the resolved mail configuration. When Locked it comes from the
