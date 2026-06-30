@@ -1068,6 +1068,17 @@ function renderBookmarks() {
     const header = el('div', 'bm-section-name', folder);
     const fid = pathToId.get(folder);
     if (fid && canEdit) {
+      const addSub = el('button', 'icon-btn bm-folder-add-sub', '+');
+      addSub.title = t('folder.new.sub');
+      addSub.onclick = () => createSubFolder(fid);
+      header.appendChild(addSub);
+
+      const rename = el('button', 'icon-btn bm-folder-rename', '✎');
+      rename.title = t('folder.rename');
+      const f = S.folders.find(f => f.id === fid);
+      rename.onclick = () => renameFolder(fid, f ? f.name : '');
+      header.appendChild(rename);
+
       const del = el('button', 'icon-btn danger bm-folder-del', '✕');
       del.title = t('folder.delete');
       del.onclick = () => deleteFolder(fid);
@@ -1356,6 +1367,28 @@ async function createFolder() {
   const parent_id = S.bmFolderId || null; // nest under the filtered folder if any
   try {
     await POST(`/collections/${S.currentColId}/folders`, { name: name.trim(), parent_id });
+    await loadFolders();
+    loadBookmarks();
+  } catch (err) { alert(err.message); }
+}
+
+async function renameFolder(id, currentName) {
+  const name = prompt(t('folder.prompt.rename'), currentName);
+  if (!name || !name.trim() || name.trim() === currentName) return;
+  const f = S.folders.find(f => f.id === id);
+  try {
+    await PUT(`/folders/${id}`, { name: name.trim(), parent_id: f ? f.parent_id : null, sort: f ? (f.sort || 0) : 0 });
+    await loadFolders();
+    loadBookmarks();
+  } catch (err) { alert(err.message); }
+}
+
+async function createSubFolder(parentId) {
+  if (!S.currentColId) return;
+  const name = prompt(t('folder.prompt.name'));
+  if (!name || !name.trim()) return;
+  try {
+    await POST(`/collections/${S.currentColId}/folders`, { name: name.trim(), parent_id: parentId });
     await loadFolders();
     loadBookmarks();
   } catch (err) { alert(err.message); }

@@ -19,6 +19,9 @@ type FolderRepository interface {
 	// GetOrCreateRoot returns a root folder (parent_id NULL) by name within a
 	// collection, creating it if absent. Used by the bookmark importer.
 	GetOrCreateRoot(ctx context.Context, collectionID, name string) (*model.Folder, error)
+	// GetOrCreate returns a folder by name and optional parent within a collection,
+	// creating it if absent. Used by the bookmark importer for nested folders.
+	GetOrCreate(ctx context.Context, collectionID string, parentID *string, name string) (*model.Folder, error)
 }
 
 type sqliteFolderRepo struct {
@@ -86,10 +89,22 @@ func (r *sqliteFolderRepo) ListByCollection(ctx context.Context, collectionID st
 }
 
 func (r *sqliteFolderRepo) GetOrCreateRoot(ctx context.Context, collectionID, name string) (*model.Folder, error) {
-	row := r.db.QueryRowContext(ctx, `
-		SELECT id, collection_id, parent_id, name, sort, created_at
-		FROM folders WHERE collection_id = ? AND parent_id IS NULL AND name = ? LIMIT 1`,
-		collectionID, name)
+	return r.GetOrCreate(ctx, collectionID, nil, name)
+}
+
+func (r *sqliteFolderRepo) GetOrCreate(ctx context.Context, collectionID string, parentID *string, name string) (*model.Folder, error) {
+	var row *sql.Row
+	if parentID == nil {
+		row = r.db.QueryRowContext(ctx, `
+			SELECT id, collection_id, parent_id, name, sort, created_at
+			FROM folders WHERE collection_id = ? AND parent_id IS NULL AND name = ? LIMIT 1`,
+			collectionID, name)
+	} else {
+		row = r.db.QueryRowContext(ctx, `
+			SELECT id, collection_id, parent_id, name, sort, created_at
+			FROM folders WHERE collection_id = ? AND parent_id = ? AND name = ? LIMIT 1`,
+			collectionID, *parentID, name)
+	}
 	f, err := scanFolder(row)
 	if err == nil {
 		return f, nil
@@ -101,6 +116,7 @@ func (r *sqliteFolderRepo) GetOrCreateRoot(ctx context.Context, collectionID, na
 	f = &model.Folder{
 		ID:           newID(),
 		CollectionID: collectionID,
+		ParentID:     parentID,
 		Name:         name,
 		CreatedAt:    time.Now(),
 	}

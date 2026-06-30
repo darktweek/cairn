@@ -209,7 +209,33 @@ func (s *bookmarkService) ImportNetscape(ctx context.Context, userID string, dat
 	}
 
 	now := time.Now()
-	folderCache := map[string]string{} // folder name -> folder id
+	// folderCache maps a null-byte-joined path to its folder ID.
+	folderCache := map[string]string{}
+
+	// getOrCreateFolder resolves (and caches) a folder for the given path,
+	// creating parent folders as needed.
+	var getOrCreateFolder func(path []string) (string, error)
+	getOrCreateFolder = func(path []string) (string, error) {
+		key := strings.Join(path, "\x00")
+		if id, ok := folderCache[key]; ok {
+			return id, nil
+		}
+		var parentID *string
+		if len(path) > 1 {
+			pid, err := getOrCreateFolder(path[:len(path)-1])
+			if err != nil {
+				return "", err
+			}
+			parentID = &pid
+		}
+		f, err := s.repos.Folders.GetOrCreate(ctx, personal.ID, parentID, path[len(path)-1])
+		if err != nil {
+			return "", err
+		}
+		folderCache[key] = f.ID
+		return f.ID, nil
+	}
+
 	var toInsert []*model.Bookmark
 	skipped := 0
 
@@ -219,15 +245,10 @@ func (s *bookmarkService) ImportNetscape(ctx context.Context, userID string, dat
 			continue
 		}
 		var folderID *string
-		if item.folder != "" {
-			id, ok := folderCache[item.folder]
-			if !ok {
-				f, err := s.repos.Folders.GetOrCreateRoot(ctx, personal.ID, item.folder)
-				if err != nil {
-					return 0, 0, err
-				}
-				id = f.ID
-				folderCache[item.folder] = id
+		if len(item.folderPath) > 0 {
+			id, err := getOrCreateFolder(item.folderPath)
+			if err != nil {
+				return 0, 0, err
 			}
 			folderID = &id
 		}
@@ -389,12 +410,13 @@ func (s *bookmarkService) applyTags(ctx context.Context, bookmarkID, userID stri
 
 // netscapeItem holds a parsed bookmark from Netscape HTML.
 type netscapeItem struct {
-	url    string
-	title  string
-	folder string
+	url        string
+	title      string
+	folderPath []string // ordered path segments; nil = no folder
 }
 
 // parseNetscape parses the Netscape bookmarks HTML format.
+// It reconstructs the full folder hierarchy, not just the immediate parent.
 func parseNetscape(data []byte) ([]netscapeItem, error) {
 	doc, err := html.Parse(bytes.NewReader(data))
 	if err != nil {
@@ -402,33 +424,52 @@ func parseNetscape(data []byte) ([]netscapeItem, error) {
 	}
 
 	var items []netscapeItem
-	var walk func(n *html.Node, folder string)
-	walk = func(n *html.Node, folder string) {
-		if n.Type == html.ElementNode {
-			switch strings.ToUpper(n.Data) {
-			case "H3":
-				folder = textContent(n)
-			case "A":
-				item := netscapeItem{folder: folder}
-				for _, attr := range n.Attr {
-					if strings.ToUpper(attr.Key) == "HREF" {
-						item.url = attr.Val
-					}
+	var walk func(n *html.Node, path []string)
+	walk = func(n *html.Node, path []string) {
+		if n.Type == html.ElementNode && strings.ToUpper(n.Data) == "A" {
+			item := netscapeItem{folderPath: path}
+			for _, attr := range n.Attr {
+				if strings.ToUpper(attr.Key) == "HREF" {
+					item.url = attr.Val
 				}
-				item.title = textContent(n)
-				if item.url != "" {
-					items = append(items, item)
-				}
-				return // don't recurse into <A>
 			}
+			item.title = textContent(n)
+			if item.url != "" {
+				items = append(items, item)
+			}
+			return // don't recurse into <A>
 		}
+
+		// Walk children. In Netscape format each folder is a DT>H3 immediately
+		// followed by a sibling DL. We carry the updated path across siblings so
+		// that the DL after a DT>H3 receives the folder name set by that H3.
+		curPath := path
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c, folder)
+			if c.Type == html.ElementNode && strings.ToUpper(c.Data) == "DT" {
+				if h3 := firstChildByTag(c, "H3"); h3 != nil {
+					name := textContent(h3)
+					newPath := make([]string, len(path), len(path)+1)
+					copy(newPath, path)
+					curPath = append(newPath, name)
+					continue // DT>H3 itself has no bookmarks
+				}
+			}
+			walk(c, curPath)
 		}
 	}
 
-	walk(doc, "")
+	walk(doc, nil)
 	return items, nil
+}
+
+// firstChildByTag returns the first direct element child of n with the given tag name.
+func firstChildByTag(n *html.Node, tag string) *html.Node {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode && strings.ToUpper(c.Data) == tag {
+			return c
+		}
+	}
+	return nil
 }
 
 func textContent(n *html.Node) string {
