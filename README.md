@@ -135,7 +135,7 @@ Settings → General → New tabs open with → Homepage → set your URL.
 ## Configuration reference
 
 All configuration is via environment variables.  
-Sensitive values go in `.env` (already gitignored).
+Sensitive values go in `.env` (already gitignored), or via **Docker Secrets** (see below).
 
 ### Core
 
@@ -200,6 +200,40 @@ Use the **Test** button in Admin → Settings → SMTP to verify delivery before
 | `CAIRN_MENU_BANG` | — | Bang that opens the full-screen menu (default `!menu`, editable in admin if not set here) |
 | `CAIRN_TOTP_ISSUER` | `Cairn` | Name shown in your authenticator app |
 | `CAIRN_BOOKMARKLET_TOKEN_LIFETIME` | `90` | Bookmarklet token lifetime in days (a bookmarklet token is a full-access session token — revoke from the account panel if leaked) |
+
+### Docker Secrets
+
+Every `CAIRN_*` variable supports a `_FILE` variant: if `CAIRN_FOO_FILE` is set,
+Cairn reads the value from that file instead of the plain env var.  
+This is the standard pattern for [Docker Swarm secrets](https://docs.docker.com/engine/swarm/secrets/)
+and Compose `secrets:` blocks — plain `.env` still works unchanged.
+
+```yaml
+services:
+  cairn:
+    image: ghcr.io/darktweek/cairn:latest
+    environment:
+      CAIRN_BASE_URL: "https://start.example.com"
+      CAIRN_SESSION_SECRET_FILE: /run/secrets/cairn_session_secret
+      CAIRN_SMTP_PASS_FILE: /run/secrets/smtp_password
+      CAIRN_OIDC_CLIENT_SECRET_FILE: /run/secrets/oidc_client_secret
+    secrets:
+      - cairn_session_secret
+      - smtp_password
+      - oidc_client_secret
+
+secrets:
+  cairn_session_secret:
+    external: true   # docker secret create cairn_session_secret <(openssl rand -base64 32)
+  smtp_password:
+    external: true
+  oidc_client_secret:
+    external: true
+```
+
+> Both `CAIRN_FOO` and `CAIRN_FOO_FILE` can coexist in the same deployment —
+> the `_FILE` variant takes priority. You can migrate secret-by-secret without
+> touching variables that are already plain env vars.
 
 ---
 

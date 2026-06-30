@@ -3,6 +3,46 @@
 All notable changes to Cairn are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are date-stamped.
 
+## v0.2.9 — Docker Secrets & bookmarklet fixes — 2026-06-30
+
+### Added
+- **Docker Secrets support**: every `CAIRN_*` env var now accepts a `_FILE`
+  variant (`CAIRN_SESSION_SECRET_FILE`, `CAIRN_SMTP_PASS_FILE`, etc.). Cairn
+  reads the secret value from the named file, stripping trailing whitespace.
+  Plain env vars and `.env` files continue to work unchanged. The `_FILE` variant
+  takes priority when both are present.
+
+### Fixed
+- **Bookmarklet — false "saved" on error**: the bookmarklet was calling
+  `encodeURIComponent(location.href)` before JSON-encoding the URL, producing a
+  percent-encoded string that failed the server's URL validation. The server
+  rejected every save with a 4xx, but the client never checked `response.ok` and
+  showed "Bookmark sauvegardé" regardless. Both bugs are fixed: the URL is sent
+  raw (JSON handles escaping), and a real error alert fires on non-2xx responses.
+- **Bookmarklet — CORS preflight never answered**: the global CORS middleware was
+  returning early for `OPTIONS` without calling `next`, so the per-route
+  `BookmarkletCORS` middleware never ran for preflights. Moved the wildcard-origin
+  logic for `/api/bookmarks/quick` directly into the global CORS middleware.
+
+## v0.2.8 — Bookmark UX — 2026-06-30
+
+### Added
+- **Infinite scroll** in the bookmark panel: replaces the previous page-by-page
+  pagination with a seamless IntersectionObserver-based sentinel.
+- **`!h` hidden-only suggestions**: typing `!h` in the search bar now suggests
+  only hidden bookmarks (previously it returned all bookmarks).
+- **Clear all bookmarks**: danger action in the bookmark panel header with a
+  typed confirmation modal (must type `CONFIRM` to proceed). Backed by
+  `DELETE /api/bookmarks` — irreversible, audited.
+- **Folder create / rename** from the bookmark panel sidebar: `+` creates a
+  sub-folder under the selected folder; `✎` renames the current folder inline.
+
+### Fixed
+- **Netscape import folder hierarchy**: the Go HTML5 parser places a nested
+  `<DL>` inside the preceding `<DT>` rather than as a sibling. The parser now
+  walks the full `DT > [H3, DL]` structure so deeply-nested bookmark folders are
+  fully recreated on import.
+
 ## v0.2.7 — Hidden bookmarks fixes — 2026-06-30
 
 ### Fixed
