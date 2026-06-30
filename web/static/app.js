@@ -31,6 +31,7 @@ const S = {
   bmTotal:     0,
   bmOffset:    0,
   bmLimit:     50,
+  bmHasMore:   false,
   bmFilter:    '',
   bmHiddenMode: false,
   bmFolderId:  '',       // folder filter within the current collection
@@ -442,10 +443,10 @@ function initSearchSuggestions() {
     fitSuggestions();
   }
 
-  async function showBookmarkSuggestions(q, hidden = false) {
+  async function showBookmarkSuggestions(q, hiddenOnly = false) {
     try {
       const params = new URLSearchParams({ search: q, limit: 6 });
-      if (hidden) params.set('hidden', '1');
+      if (hiddenOnly) params.set('hidden_only', '1');
       const data   = await GET(`/bookmarks?${params}`);
       const bms    = data.bookmarks || [];
       if (!bms.length) { hideSuggestions(); return; }
@@ -535,7 +536,7 @@ async function handleSearch(e) {
       case 'h': {
         const hQ = rest.trim();
         if (!hQ) { $('search-input').value = ''; return; }
-        const res = await GET(`/bookmarks?search=${encodeURIComponent(hQ)}&hidden=1&limit=200`);
+        const res = await GET(`/bookmarks?search=${encodeURIComponent(hQ)}&hidden_only=1&limit=200`);
         S.bmHiddenMode = true;
         S.bookmarks = res.bookmarks || [];
         S.bmTotal = S.bookmarks.length;
@@ -1011,9 +1012,20 @@ function populateFolderFilter() {
   }
 }
 
-async function loadBookmarks() {
+// bmScrollObserver watches the sentinel div to trigger the next page load.
+let bmScrollObserver = null;
+
+async function loadBookmarks(reset = true) {
   S.bmHiddenMode = false;
   if (!S.currentColId) { S.bookmarks = []; renderBookmarks(); return; }
+
+  if (reset) {
+    S.bmOffset  = 0;
+    S.bookmarks = [];
+    S.bmHasMore = false;
+    disconnectScrollObserver();
+  }
+
   const params = new URLSearchParams({
     offset:        S.bmOffset,
     limit:         S.bmLimit,
@@ -1024,13 +1036,29 @@ async function loadBookmarks() {
   if (S.bmFolderId) params.set('folder_id', S.bmFolderId);
 
   try {
-    const data = await GET(`/bookmarks?${params}`);
-    S.bookmarks = data.bookmarks || data.items || data || [];
+    const data  = await GET(`/bookmarks?${params}`);
+    const page  = data.bookmarks || data.items || data || [];
+    S.bookmarks = reset ? page : S.bookmarks.concat(page);
     S.bmTotal   = data.total ?? S.bookmarks.length;
+    S.bmHasMore = S.bmOffset + page.length < S.bmTotal;
+    S.bmOffset += page.length;
     renderBookmarks();
   } catch (err) {
     $('bm-list').textContent = t('error') + ': ' + err.message;
   }
+}
+
+function disconnectScrollObserver() {
+  if (bmScrollObserver) { bmScrollObserver.disconnect(); bmScrollObserver = null; }
+}
+
+function attachScrollObserver() {
+  const sentinel = $('bm-scroll-sentinel');
+  if (!sentinel || !S.bmHasMore) return;
+  bmScrollObserver = new IntersectionObserver(entries => {
+    if (entries[0].isIntersecting && S.bmHasMore) loadBookmarks(false);
+  }, { root: $('bm-list').parentElement, threshold: 0.1 });
+  bmScrollObserver.observe(sentinel);
 }
 
 function renderBookmarks() {
@@ -1100,23 +1128,13 @@ function renderBookmarks() {
     list.appendChild(section);
   }
 
-  // Pagination
-  if (S.bmTotal > S.bmLimit) {
-    const pag = el('div', 'pagination');
-    const prev = el('button', 'page-btn', t('bm.prev'));
-    prev.disabled = S.bmOffset === 0;
-    prev.onclick  = () => { S.bmOffset = Math.max(0, S.bmOffset - S.bmLimit); loadBookmarks(); };
-
-    const info = el('span', 'page-info',
-      `${S.bmOffset + 1}–${Math.min(S.bmOffset + S.bmLimit, S.bmTotal)} / ${S.bmTotal}`);
-
-    const next = el('button', 'page-btn', t('bm.next'));
-    next.disabled = S.bmOffset + S.bmLimit >= S.bmTotal;
-    next.onclick  = () => { S.bmOffset += S.bmLimit; loadBookmarks(); };
-
-    pag.append(prev, info, next);
-    list.appendChild(pag);
-  }
+  // Infinite scroll sentinel — observed by attachScrollObserver()
+  disconnectScrollObserver();
+  const sentinel = document.createElement('div');
+  sentinel.id = 'bm-scroll-sentinel';
+  sentinel.className = 'bm-scroll-sentinel';
+  list.appendChild(sentinel);
+  if (S.bmHasMore) attachScrollObserver();
 }
 
 function makeBmItem(bm, glyph) {
@@ -1273,7 +1291,6 @@ async function saveBookmark() {
       await POST('/bookmarks', { url, title, hidden, collection_id, folder_id, tags });
     }
     hide('modal-bookmark');
-    S.bmOffset = 0;
     loadCollections();
   } catch (err) {
     setError('modal-bm-error', err.message);
@@ -1318,7 +1335,6 @@ async function importBookmarks(file) {
     const json = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(json.error || 'Import error');
     alert(`${t('bm.import.ok')}: ${json.imported ?? '?'} ${t('bm.import.added')}, ${json.skipped ?? '?'} ${t('bm.import.skipped')}.`);
-    S.bmOffset = 0;
     loadCollections();
   } catch (err) {
     alert(err.message);
@@ -3355,18 +3371,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('bm-search-input').addEventListener('input', () => {
     S.bmFilter = $('bm-search-input').value.trim();
-    S.bmOffset = 0;
     loadBookmarks();
   });
   $('bm-folder-filter').addEventListener('change', () => {
     S.bmFolderId = $('bm-folder-filter').value;
-    S.bmOffset = 0;
     loadBookmarks();
   });
   $('bm-collection-filter').addEventListener('change', () => {
     S.currentColId = $('bm-collection-filter').value;
     S.bmFolderId = '';
-    S.bmOffset = 0;
     populateCollectionFilter();
     loadFolders().then(loadBookmarks);
   });

@@ -20,6 +20,7 @@ func (h *Handler) ListBookmarks(w http.ResponseWriter, r *http.Request) {
 	filter := repository.BookmarkFilter{
 		Search:        q.Get("search"),
 		IncludeHidden: q.Get("hidden") == "1",
+		HiddenOnly:    q.Get("hidden_only") == "1",
 		Offset:        offset,
 		Limit:         limit,
 	}

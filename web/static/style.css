@@ -1453,29 +1453,8 @@ body.searching #date-line {
 .audit-user  { color: var(--text-dim); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .audit-time  { color: var(--text-dimmer); flex-shrink: 0; white-space: nowrap; }
 
-/* ── Pagination ──────────────────────────────────────── */
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding-top: 1rem;
-}
-
-.page-btn {
-  background: var(--btn-bg);
-  border: 1px solid var(--border);
-  border-radius: 0.4rem;
-  color: var(--text-dim);
-  cursor: pointer;
-  padding: 0.3rem 0.7rem;
-  font-size: 0.8rem;
-  transition: background 0.15s;
-}
-.page-btn:hover    { background: var(--btn-hover); }
-.page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-
-.page-info { font-size: 0.78rem; color: var(--text-dimmer); }
+/* ── Infinite scroll sentinel ────────────────────────── */
+.bm-scroll-sentinel { height: 1px; }
 
 /* ── Utility ─────────────────────────────────────────── */
 .flex        { display: flex; }

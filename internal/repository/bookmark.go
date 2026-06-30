@@ -17,6 +17,7 @@ type BookmarkFilter struct {
 	TagID          *string
 	Search         string
 	IncludeHidden  bool // when false, hidden bookmarks are excluded
+	HiddenOnly     bool // when true, return ONLY hidden bookmarks
 	Offset         int
 	Limit          int
 }
@@ -122,7 +123,9 @@ func (r *sqliteBookmarkRepo) list(ctx context.Context, baseCond, baseArg string,
 		term := "%" + f.Search + "%"
 		args = append(args, term, term)
 	}
-	if !f.IncludeHidden {
+	if f.HiddenOnly {
+		where = append(where, "bookmarks.hidden = 1")
+	} else if !f.IncludeHidden {
 		where = append(where, "bookmarks.hidden = 0")
 	}
 
