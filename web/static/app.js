@@ -353,12 +353,13 @@ const BANGS = [
   { bang: '!leo',   label: 'Leo (dict)',        url: 'https://dict.leo.org/englisch-deutsch/' },
   { bang: '!tr',    label: 'DeepL',            url: 'https://www.deepl.com/translator#auto/auto/' },
   // Internal bangs — handled in handleSearch, never leave the page
-  { bang: '!bm',     label: 'Mes marque-pages', url: null },
-  { bang: '!me',     label: 'Mon compte',       url: null },
-  { bang: '!theme',  label: 'Thème & effets',   url: null },
-  { bang: '!admin',  label: 'Administration',   url: null },
-  { bang: '!stats',  label: 'Statistiques',     url: null },
-  { bang: '!logout', label: 'Déconnexion',      url: null },
+  { bang: '!bm',     label: 'Mes marque-pages',          url: null },
+  { bang: '!h',      label: 'Marque-pages cachés',       url: null },
+  { bang: '!me',     label: 'Mon compte',                url: null },
+  { bang: '!theme',  label: 'Thème & effets',            url: null },
+  { bang: '!admin',  label: 'Administration',            url: null },
+  { bang: '!stats',  label: 'Statistiques',              url: null },
+  { bang: '!logout', label: 'Déconnexion',               url: null },
 ];
 
 function initSearchSuggestions() {
@@ -441,9 +442,10 @@ function initSearchSuggestions() {
     fitSuggestions();
   }
 
-  async function showBookmarkSuggestions(q) {
+  async function showBookmarkSuggestions(q, hidden = false) {
     try {
       const params = new URLSearchParams({ search: q, limit: 6 });
+      if (hidden) params.set('hidden', '1');
       const data   = await GET(`/bookmarks?${params}`);
       const bms    = data.bookmarks || [];
       if (!bms.length) { hideSuggestions(); return; }
@@ -486,7 +488,11 @@ function initSearchSuggestions() {
     const q = input.value.trim();
     if (!q) { hideSuggestions(); return; }
     clearTimeout(debounce);
-    if (q.startsWith('!')) {
+    // !h <query> → suggest hidden bookmarks
+    const hMatch = q.match(/^!h\s+(.+)$/i);
+    if (hMatch) {
+      debounce = setTimeout(() => showBookmarkSuggestions(hMatch[1].trim(), true), 180);
+    } else if (q.startsWith('!')) {
       showBangSuggestions(q);
     } else {
       debounce = setTimeout(() => showBookmarkSuggestions(q), 180);
@@ -526,15 +532,15 @@ async function handleSearch(e) {
     const bang = m[1].toLowerCase();
     const rest = m[2].trim();
     switch (bang) {
-      case 'nsfw': {
-        const nsfwQ = rest.trim();
-        if (!nsfwQ) { $('search-input').value = ''; return; }
-        const res = await GET(`/bookmarks?search=${encodeURIComponent(nsfwQ)}&hidden=1&limit=200`);
+      case 'h': {
+        const hQ = rest.trim();
+        if (!hQ) { $('search-input').value = ''; return; }
+        const res = await GET(`/bookmarks?search=${encodeURIComponent(hQ)}&hidden=1&limit=200`);
         S.bmHiddenMode = true;
         S.bookmarks = res.bookmarks || [];
         S.bmTotal = S.bookmarks.length;
         openBookmarks();
-        if ($('bm-search-input')) $('bm-search-input').value = nsfwQ;
+        if ($('bm-search-input')) $('bm-search-input').value = hQ;
         renderBookmarks();
         $('search-input').value = '';
         return;
