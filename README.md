@@ -60,7 +60,7 @@ Type `!menu` (or your configured bang) for the full-screen hub.
 your machine:
 
 ```
-ghcr.io/darktweek/cairn:latest   # or pin a version, e.g. :v0.2.3
+ghcr.io/darktweek/cairn:latest   # or pin a version, e.g. :0.2.3 (no "v")
 ```
 
 ---
@@ -111,8 +111,9 @@ docker compose up -d
 > **copy the invite link** shown right after creating one — no email needed. SMTP
 > only *delivers* invitations and password resets automatically.
 
-Pin a version with `:v0.2.3` instead of `:latest`. See the
-[Configuration reference](#configuration-reference) for all environment variables.
+Pin a version with `:0.2.3` instead of `:latest` (image tags are semver, no `v`
+prefix). See the [Configuration reference](#configuration-reference) for all
+environment variables.
 
 ---
 
