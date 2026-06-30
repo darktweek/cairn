@@ -3,6 +3,16 @@
 All notable changes to Cairn are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are date-stamped.
 
+## v0.2.6 — Hidden bookmarks — 2026-06-30
+
+### Added
+- **Hidden bookmarks**: any bookmark can be marked as hidden (toggle in the
+  add/edit modal). Hidden bookmarks are excluded from all searches by default
+  and shown with a 🔒 badge and dimmed style.
+- **`!nsfw <query>`** bang: searches hidden bookmarks only, keeping them out
+  of normal search results. Example: `!nsfw recipe` returns only hidden
+  bookmarks matching "recipe".
+
 ## v0.2.5 — Custom branding — 2026-06-30
 
 ### Added

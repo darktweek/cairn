@@ -976,6 +976,8 @@ body.searching #date-line {
   white-space: nowrap;
 }
 .bm-link:hover { text-decoration: underline; text-decoration-style: dotted; }
+.bm-link.bm-hidden { opacity: 0.55; font-style: italic; }
+.bm-hidden-badge { font-size: 0.75rem; opacity: 0.6; margin-right: 0.25rem; cursor: default; }
 
 .bm-url {
   color: var(--text-dimmer);

@@ -10,6 +10,7 @@ type Bookmark struct {
 	URL          string    `json:"url"`
 	Title        string    `json:"title"`
 	Folder       *string   `json:"folder"` // deprecated: legacy folder string, superseded by FolderID
+	Hidden       bool      `json:"hidden"`
 	Sort         int       `json:"sort"`
 	Tags         []Tag     `json:"tags"`
 	CreatedAt    time.Time `json:"created_at"`

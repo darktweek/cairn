@@ -32,6 +32,7 @@ const S = {
   bmOffset:    0,
   bmLimit:     50,
   bmFilter:    '',
+  bmHiddenMode: false,
   bmFolderId:  '',       // folder filter within the current collection
   collections: [],
   currentColId: '',      // selected collection id
@@ -508,7 +509,7 @@ function initSearchSuggestions() {
   input.addEventListener('blur', () => setTimeout(hideSuggestions, 150));
 }
 
-function handleSearch(e) {
+async function handleSearch(e) {
   e.preventDefault();
   const q = $('search-input').value.trim();
   if (!q) return;
@@ -525,6 +526,19 @@ function handleSearch(e) {
     const bang = m[1].toLowerCase();
     const rest = m[2].trim();
     switch (bang) {
+      case 'nsfw': {
+        const nsfwQ = rest.trim();
+        if (!nsfwQ) { $('search-input').value = ''; return; }
+        const res = await GET(`/bookmarks?search=${encodeURIComponent(nsfwQ)}&hidden=1&limit=200`);
+        S.bmHiddenMode = true;
+        S.bookmarks = res.bookmarks || [];
+        S.bmTotal = S.bookmarks.length;
+        openBookmarks();
+        if ($('bm-search-input')) $('bm-search-input').value = nsfwQ;
+        renderBookmarks();
+        $('search-input').value = '';
+        return;
+      }
       case 'bm': case 'edit':
         openBookmarks();
         $('search-input').value = '';
@@ -992,6 +1006,7 @@ function populateFolderFilter() {
 }
 
 async function loadBookmarks() {
+  S.bmHiddenMode = false;
   if (!S.currentColId) { S.bookmarks = []; renderBookmarks(); return; }
   const params = new URLSearchParams({
     offset:        S.bmOffset,
@@ -1095,10 +1110,17 @@ function makeBmItem(bm, glyph) {
   link.href   = bm.url;
   link.target = '_blank';
   link.rel    = 'noopener noreferrer';
+  if (bm.hidden) link.classList.add('bm-hidden');
 
   const urlSpan = el('span', 'bm-url', new URL(bm.url).hostname);
 
   const actions = el('div', 'bm-actions');
+
+  if (bm.hidden) {
+    const badge = el('span', 'bm-hidden-badge', '🔒');
+    badge.title = t('bm.hidden.badge') || 'Hidden';
+    actions.appendChild(badge);
+  }
 
   if (S.curCanWrite !== false) {
     const editBtn = el('button', 'icon-btn', '✎');
@@ -1184,6 +1206,7 @@ function openAddBookmark() {
   $('modal-bm-title').textContent   = t('bm.modal.add');
   $('modal-bm-url').value           = '';
   $('modal-bm-title-input').value   = '';
+  $('modal-bm-hidden').checked      = false;
   populateModalCollections(S.currentColId);
   populateModalFolders(S.folders, S.bmFolderId);
   $('modal-bm-tags').value          = '';
@@ -1205,6 +1228,7 @@ async function openEditBookmark(bm) {
   }
   populateModalFolders(folders, bm.folder_id || '');
   $('modal-bm-tags').value          = (bm.tags || []).map(t => t.name).join(', ');
+  $('modal-bm-hidden').checked      = !!bm.hidden;
   setError('modal-bm-error', '');
   show('modal-bookmark');
   $('modal-bm-title-input').focus();
@@ -1214,6 +1238,7 @@ async function saveBookmark() {
   setError('modal-bm-error', '');
   const url           = $('modal-bm-url').value.trim();
   const title         = $('modal-bm-title-input').value.trim();
+  const hidden        = $('modal-bm-hidden').checked;
   const collection_id = $('modal-bm-collection').value || '';
   const folder_id     = $('modal-bm-folder-select').value || null;
   const tags          = $('modal-bm-tags').value.split(',').map(t => t.trim()).filter(Boolean);
@@ -1225,9 +1250,9 @@ async function saveBookmark() {
 
   try {
     if (S.editingBmId) {
-      await PUT(`/bookmarks/${S.editingBmId}`, { url, title, collection_id, folder_id, tags });
+      await PUT(`/bookmarks/${S.editingBmId}`, { url, title, hidden, collection_id, folder_id, tags });
     } else {
-      await POST('/bookmarks', { url, title, collection_id, folder_id, tags });
+      await POST('/bookmarks', { url, title, hidden, collection_id, folder_id, tags });
     }
     hide('modal-bookmark');
     S.bmOffset = 0;

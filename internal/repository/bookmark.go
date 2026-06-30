@@ -12,12 +12,13 @@ import (
 )
 
 type BookmarkFilter struct {
-	CollectionID *string
-	FolderID     *string
-	TagID        *string
-	Search       string
-	Offset       int
-	Limit        int
+	CollectionID   *string
+	FolderID       *string
+	TagID          *string
+	Search         string
+	IncludeHidden  bool // when false, hidden bookmarks are excluded
+	Offset         int
+	Limit          int
 }
 
 type BookmarkRepository interface {
@@ -46,13 +47,13 @@ func newSQLiteBookmarkRepo(db *sql.DB) BookmarkRepository {
 	return &sqliteBookmarkRepo{db: db}
 }
 
-const bookmarkCols = `id, user_id, collection_id, folder_id, url, title, sort, created_at, updated_at`
+const bookmarkCols = `id, user_id, collection_id, folder_id, url, title, hidden, sort, created_at, updated_at`
 
 func (r *sqliteBookmarkRepo) Create(ctx context.Context, b *model.Bookmark) error {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO bookmarks (id, user_id, collection_id, folder_id, url, title, sort, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		b.ID, b.UserID, b.CollectionID, b.FolderID, b.URL, b.Title, b.Sort,
+		INSERT INTO bookmarks (id, user_id, collection_id, folder_id, url, title, hidden, sort, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		b.ID, b.UserID, b.CollectionID, b.FolderID, b.URL, b.Title, b.Hidden, b.Sort,
 		b.CreatedAt.Unix(), b.UpdatedAt.Unix(),
 	)
 	if err != nil {
@@ -76,9 +77,9 @@ func (r *sqliteBookmarkRepo) GetByID(ctx context.Context, id string) (*model.Boo
 
 func (r *sqliteBookmarkRepo) Update(ctx context.Context, b *model.Bookmark) error {
 	_, err := r.db.ExecContext(ctx, `
-		UPDATE bookmarks SET collection_id = ?, folder_id = ?, url = ?, title = ?, sort = ?, updated_at = ?
+		UPDATE bookmarks SET collection_id = ?, folder_id = ?, url = ?, title = ?, hidden = ?, sort = ?, updated_at = ?
 		WHERE id = ?`,
-		b.CollectionID, b.FolderID, b.URL, b.Title, b.Sort, b.UpdatedAt.Unix(), b.ID,
+		b.CollectionID, b.FolderID, b.URL, b.Title, b.Hidden, b.Sort, b.UpdatedAt.Unix(), b.ID,
 	)
 	return err
 }
@@ -114,6 +115,9 @@ func (r *sqliteBookmarkRepo) list(ctx context.Context, baseCond, baseArg string,
 		where = append(where, "(bookmarks.title LIKE ? OR bookmarks.url LIKE ?)")
 		term := "%" + f.Search + "%"
 		args = append(args, term, term)
+	}
+	if !f.IncludeHidden {
+		where = append(where, "bookmarks.hidden = 0")
 	}
 
 	from := "FROM bookmarks"
@@ -250,8 +254,8 @@ func (r *sqliteBookmarkRepo) BulkCreate(ctx context.Context, bookmarks []*model.
 	defer tx.Rollback()
 
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT OR IGNORE INTO bookmarks (id, user_id, collection_id, folder_id, url, title, sort, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		INSERT OR IGNORE INTO bookmarks (id, user_id, collection_id, folder_id, url, title, hidden, sort, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -259,7 +263,7 @@ func (r *sqliteBookmarkRepo) BulkCreate(ctx context.Context, bookmarks []*model.
 
 	for _, b := range bookmarks {
 		if _, err := stmt.ExecContext(ctx,
-			b.ID, b.UserID, b.CollectionID, b.FolderID, b.URL, b.Title, b.Sort,
+			b.ID, b.UserID, b.CollectionID, b.FolderID, b.URL, b.Title, b.Hidden, b.Sort,
 			b.CreatedAt.Unix(), b.UpdatedAt.Unix(),
 		); err != nil {
 			return fmt.Errorf("bulk create bookmark: %w", err)
@@ -303,7 +307,7 @@ func scanBookmark(s scanner) (*model.Bookmark, error) {
 	var folderID sql.NullString
 	var createdAt, updatedAt int64
 
-	err := s.Scan(&b.ID, &b.UserID, &b.CollectionID, &folderID, &b.URL, &b.Title, &b.Sort, &createdAt, &updatedAt)
+	err := s.Scan(&b.ID, &b.UserID, &b.CollectionID, &folderID, &b.URL, &b.Title, &b.Hidden, &b.Sort, &createdAt, &updatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -323,7 +327,7 @@ func scanBookmarkWithAuthor(s scanner) (*model.Bookmark, error) {
 	var folderID sql.NullString
 	var createdAt, updatedAt int64
 
-	err := s.Scan(&b.ID, &b.UserID, &b.CollectionID, &folderID, &b.URL, &b.Title, &b.Sort,
+	err := s.Scan(&b.ID, &b.UserID, &b.CollectionID, &folderID, &b.URL, &b.Title, &b.Hidden, &b.Sort,
 		&createdAt, &updatedAt, &b.AddedByUsername)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

@@ -19,6 +19,7 @@ import (
 type BookmarkInput struct {
 	URL          string
 	Title        string
+	Hidden       bool
 	CollectionID string // empty = the user's personal collection
 	FolderID     *string
 	Tags         []string
@@ -109,6 +110,7 @@ func (s *bookmarkService) Create(ctx context.Context, userID string, in Bookmark
 		FolderID:     folderID,
 		URL:          in.URL,
 		Title:        in.Title,
+		Hidden:       in.Hidden,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
@@ -150,6 +152,7 @@ func (s *bookmarkService) Update(ctx context.Context, userID, bookmarkID string,
 	b.FolderID = folderID
 	b.URL = in.URL
 	b.Title = in.Title
+	b.Hidden = in.Hidden
 	b.UpdatedAt = time.Now()
 
 	if err := s.repos.Bookmarks.Update(ctx, b); err != nil {

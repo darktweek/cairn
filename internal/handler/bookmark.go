@@ -18,9 +18,10 @@ func (h *Handler) ListBookmarks(w http.ResponseWriter, r *http.Request) {
 	offset, limit := pageParams(r)
 
 	filter := repository.BookmarkFilter{
-		Search: q.Get("search"),
-		Offset: offset,
-		Limit:  limit,
+		Search:        q.Get("search"),
+		IncludeHidden: q.Get("hidden") == "1",
+		Offset:        offset,
+		Limit:         limit,
 	}
 	if folderID := q.Get("folder_id"); folderID != "" {
 		filter.FolderID = &folderID
@@ -57,6 +58,7 @@ func (h *Handler) CreateBookmark(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		URL          string   `json:"url"`
 		Title        string   `json:"title"`
+		Hidden       bool     `json:"hidden"`
 		CollectionID string   `json:"collection_id"`
 		FolderID     *string  `json:"folder_id"`
 		Tags         []string `json:"tags"`
@@ -69,6 +71,7 @@ func (h *Handler) CreateBookmark(w http.ResponseWriter, r *http.Request) {
 	b, err := h.Bookmark.Create(r.Context(), user.ID, service.BookmarkInput{
 		URL:          body.URL,
 		Title:        body.Title,
+		Hidden:       body.Hidden,
 		CollectionID: body.CollectionID,
 		FolderID:     body.FolderID,
 		Tags:         body.Tags,
@@ -94,6 +97,7 @@ func (h *Handler) UpdateBookmark(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		URL          string   `json:"url"`
 		Title        string   `json:"title"`
+		Hidden       bool     `json:"hidden"`
 		CollectionID string   `json:"collection_id"`
 		FolderID     *string  `json:"folder_id"`
 		Tags         []string `json:"tags"`
@@ -106,6 +110,7 @@ func (h *Handler) UpdateBookmark(w http.ResponseWriter, r *http.Request) {
 	if err := h.Bookmark.Update(r.Context(), user.ID, id, service.BookmarkInput{
 		URL:          body.URL,
 		Title:        body.Title,
+		Hidden:       body.Hidden,
 		CollectionID: body.CollectionID,
 		FolderID:     body.FolderID,
 		Tags:         body.Tags,
